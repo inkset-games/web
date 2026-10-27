@@ -26,7 +26,10 @@
   .night .lede { color: #cfc8b8; max-width: 34ch; }
   .hl { background: var(--ink); color: var(--ink); border-radius: 3px; padding: 0 .1em; }
   .split { display: grid; grid-template-columns: 1fr 470px; gap: 56px; height: 100%; }
-  .thumb { align-self: center; width: 470px; height: 314px; object-fit: cover; border-radius: 8px; box-shadow: 0 24px 60px -24px rgba(20,18,10,.55); }
+  .thumb { width: 420px; height: 280px; object-fit: cover; border-radius: 8px; box-shadow: 0 24px 60px -24px rgba(20,18,10,.55); position: absolute; }
+  .stack { position: relative; height: 100%; }
+  .stack .back { top: 40px; right: 0; transform: rotate(3deg); }
+  .stack .front { bottom: 30px; left: 0; transform: rotate(-2.5deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.6); }
 </style>
 </head>
 <body>
@@ -65,7 +68,10 @@
         <p class="lede" style="font-size:26px; max-width:none">Small games that run in your browser.</p>
       </div>
     </div>
-    <img class="thumb" src="../docs/experiments/yendor/thumb.jpg" alt="">
+    <div class="stack">
+      <img class="thumb back" src="../docs/experiments/yendor/thumb.jpg" alt="">
+      <img class="thumb front" src="../docs/experiments/topple/thumb.jpg" alt="">
+    </div>
   </div>
 </div>
 
