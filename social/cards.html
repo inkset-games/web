@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Source for the 1200x630 social share cards in docs/og/. Render with: node social/render.js -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Spectral:wght@400;500&family=Special+Elite&display=swap">
+<style>
+  :root { --paper: #F1F0E7; --ink: #1B1A14; --ink-2: #46443a; --rule: #D8D5C8; --amber: #A8682A; --night: #0E0E0B; --bone: #E7E1D2; --gold: #D08A3C;
+    --serif: "Spectral", Georgia, serif; --mono: "JetBrains Mono", monospace; }
+  html, body { margin: 0; }
+  .card { width: 1200px; height: 630px; box-sizing: border-box; padding: 64px 80px; position: relative; overflow: hidden; display: flex; flex-direction: column; font-family: var(--serif); }
+  .paper { background: var(--paper); color: var(--ink); }
+  .night { background: var(--night); color: var(--bone); }
+  .logo { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 700; font-size: 34px; letter-spacing: -0.02em; }
+  .logo i { display: inline-block; width: 7px; height: 7px; background: currentColor; border-radius: 50%; margin-left: 3px; vertical-align: 18px; }
+  .night .logo i { background: var(--gold); }
+  .eyebrow { font-family: var(--mono); font-size: 18px; letter-spacing: .26em; text-transform: uppercase; color: var(--amber); margin: 0 0 22px; }
+  .night .eyebrow { color: var(--gold); }
+  h1 { font-weight: 500; font-size: 96px; line-height: 1.02; letter-spacing: -0.015em; margin: 0; }
+  .lede { font-size: 30px; line-height: 1.45; color: var(--ink-2); margin: 28px 0 0; max-width: 30ch; }
+  .main { margin-top: auto; }
+  .url { position: absolute; right: 80px; top: 74px; font-family: var(--mono); font-size: 18px; letter-spacing: .14em; text-transform: uppercase; color: #8a887c; }
+  .blot { position: absolute; right: 120px; bottom: 150px; }
+  .redword { display: flex; align-items: center; gap: 26px; font-family: "Special Elite", var(--mono); font-size: 150px; line-height: 1; }
+  .bar { display: inline-block; width: 260px; height: 0.78em; border-radius: 6px; background-color: var(--gold); background-image: repeating-linear-gradient(45deg, rgba(14,14,11,.42) 0 9px, transparent 9px 18px); }
+  .night .lede { color: #cfc8b8; max-width: 34ch; }
+  .hl { background: var(--ink); color: var(--ink); border-radius: 3px; padding: 0 .1em; }
+  .split { display: grid; grid-template-columns: 1fr 470px; gap: 56px; height: 100%; }
+  .thumb { width: 420px; height: 280px; object-fit: cover; border-radius: 8px; box-shadow: 0 24px 60px -24px rgba(20,18,10,.55); position: absolute; }
+  .stack { position: relative; height: 100%; }
+  .stack .back { top: 40px; right: 0; transform: rotate(3deg); }
+  .stack .front { bottom: 30px; left: 0; transform: rotate(-2.5deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.6); }
+</style>
+</head>
+<body>
+
+<div class="card paper" id="home">
+  <div class="logo">inkset<i></i></div>
+  <div class="url">inkset.games</div>
+  <svg class="blot" width="150" height="120" viewBox="0 0 150 120" aria-hidden="true">
+    <circle cx="70" cy="66" r="34" fill="#1B1A14"/><circle cx="118" cy="26" r="9" fill="#1B1A14"/>
+    <circle cx="132" cy="56" r="4" fill="#3a382e"/><circle cx="22" cy="92" r="5" fill="#3a382e"/><circle cx="96" cy="8" r="3" fill="#3a382e"/>
+  </svg>
+  <div class="main">
+    <p class="eyebrow">An independent game studio</p>
+    <h1>Word games<br>worth the ink.</h1>
+    <p class="lede">Small, daily puzzles for people who love language.</p>
+  </div>
+</div>
+
+<div class="card night" id="redacted">
+  <div class="logo">inkset<i></i></div>
+  <div class="url">inkset.games/redacted</div>
+  <div class="main">
+    <p class="eyebrow">A daily word game</p>
+    <div class="redword"><span>RE</span><span class="bar"></span><span>TED</span></div>
+    <p class="lede">One paragraph. The best words, blacked out. Put them back.</p>
+  </div>
+</div>
+
+<div class="card paper" id="experiments">
+  <div class="split">
+    <div style="display:flex; flex-direction:column;">
+      <div class="logo">inkset<i></i></div>
+      <div class="main">
+        <p class="eyebrow">From the workbench</p>
+        <h1 style="font-size:84px">Experiments,<br>half-finished<br>on purpose.</h1>
+        <p class="lede" style="font-size:26px; max-width:none">Small games that run in your browser.</p>
+      </div>
+    </div>
+    <div class="stack">
+      <img class="thumb back" src="../docs/experiments/yendor/thumb.jpg" alt="">
+      <img class="thumb front" src="../docs/experiments/topple/thumb.jpg" alt="">
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
