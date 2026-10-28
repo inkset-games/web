@@ -1,5 +1,5 @@
 // Balance check: a greedy bot plays the campaign from a fresh save, spending gems in the shop between runs.
-// Usage: node sim.js [lastMine] [maxRunsPerMine]   (VP=390x844 for a phone-sized view, TAP=0.35 seconds per tap)
+// Usage: node sim.js [lastMine] [maxRunsPerMine]   (VP=390x844 for a phone-sized view, TAP=0.35 seconds of thinking between taps)
 const { chromium } = require("playwright");
 const path = require("path");
 (async () => {
@@ -11,7 +11,7 @@ const path = require("path");
   await p.goto("file://" + path.join(__dirname, "..", "..", "docs", "experiments", "undermine", "index.html"));
   await p.waitForTimeout(1200);
   const [last, maxRuns] = [+(process.argv[2] || 12), +(process.argv[3] || 10)];
-  const cont = !!process.env.CONTINUE, tap = +(process.env.TAP || 0.35); // seconds between taps, about a relaxed human
+  const cont = !!process.env.CONTINUE, tap = +(process.env.TAP || 0.35); // thinking time between taps, about a relaxed human
   const res = await p.evaluate(({ last, maxRuns, cont, tap }) => {
     const U = window.__um, out = [];
     U.reset();
@@ -32,11 +32,12 @@ const path = require("path");
         let t = 0;
         while (U.mode === "play" && t < 600) {
           const S = U.S;
-          if (!S.won && !S.over && S.swings > 0) {
+          if (!S.won && !S.over && S.swings > 0 && !S.job && !S.queue.length && !S.P.fall) {
             if (S.bombs > 0 && S.swings < 20) { const c = U.botChoice(); if (c) { S.armed = true; U.tapCell(c.x, c.y); } }
             const c = U.botChoice(); if (c) U.tapCell(c.x, c.y); else break;
+            for (let i = 0; i < tap * 60; i++) U.step(1 / 60); t += tap;   // thinking time before the next tap
           }
-          for (let i = 0; i < tap * 60; i++) U.step(1 / 60); t += tap;
+          U.step(1 / 60); t += 1 / 60;
         }
         const S = U.S;
         won = S.won;
