@@ -106,3 +106,21 @@ song("theme", { bpm: 104, vol: 0.6, fx: [reverb({ size: 0.5, mix: 0.18 }), limit
   track("kick", "x . . . . . x . x . . . . . . . | x . . . . . x . x . . . . . x ."),
   track("snare", ". . . . x . . . . . . . x . . . | . . . . x . . . . . . . x . . x", { vol: 0.6 }),
   track("hat", ". . x . . . x . . . x . . . x x", { vol: 0.35 }))
+
+sfx("win", { vol: 0.42, fx: [reverb({ size: 0.5, mix: 0.2 })] },
+  ...["C5", "E5", "G5"].map((n, i) => at(i * 0.1, tone({ wave: "square", duty: 0.25, freq: n, dur: 0.09, env: [0.002, 0.04, 0.6, 0.04] }))),
+  at(0.3, tone({ wave: "square", duty: 0.25, freq: "C6", dur: 0.5, vibrato: { rate: 6, depth: 0.2, delay: 0.15 }, env: [0.002, 0.1, 0.7, 0.3] })),
+  at(0.3, tone({ wave: "triangle", freq: "C3", dur: 0.5, env: [0.002, 0.1, 0.7, 0.3], vol: 0.8 })),
+  at(0.3, tone({ wave: "square", duty: 0.5, freq: "E5", dur: 0.5, env: [0.002, 0.1, 0.6, 0.3], vol: 0.4 })))
+sfx("star", { vol: 0.4, fx: [reverb({ size: 0.4, mix: 0.2 })] },
+  tone({ wave: "fm", fm: { ratio: 3.5, index: 2.5, decay: 0.3 }, freq: "A5", dur: 0.25, env: [0.001, 0.2, 0.3, 0.4] }),
+  at(0.06, tone({ wave: "fm", fm: { ratio: 3.5, index: 2.5, decay: 0.3 }, freq: "E6", dur: 0.25, env: [0.001, 0.2, 0.3, 0.4], vol: 0.7 })))
+
+// one pop per block in a colour chain; the game raises the pitch as the chain grows
+sfx("pop", { vol: 0.4 },
+  tone({ wave: "sine", freq: 520, to: 980, slide: 0.05, dur: 0.05, env: [0.001, 0.04, 0.2, 0.05] }),
+  tone({ wave: "triangle", freq: 1040, to: 1600, slide: 0.04, dur: 0.03, env: [0.001, 0.03, 0, 0.03], vol: 0.4 }),
+  noise({ dur: 0.015, env: [0.001, 0.015, 0, 0.01], filter: { type: "hp", cutoff: 5000 }, vol: 0.25 }))
+sfx("bigchain", { vol: 0.42, fx: [reverb({ size: 0.5, mix: 0.25 })] },
+  tone({ wave: "square", duty: 0.25, freq: "G5", to: "G6", dur: 0.35, arp: { notes: [0, 4, 7, 12, 16], rate: 0.035 }, env: [0.002, 0.08, 0.6, 0.25] }),
+  tone({ wave: "triangle", freq: "G3", dur: 0.35, env: [0.002, 0.08, 0.6, 0.25], vol: 0.6 }))

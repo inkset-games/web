@@ -162,7 +162,47 @@ sprite("i_gem", I, stamp("gem_emerald", 1, 1, { scale: 0.95 }))
 sprite("i_eye", I, path("M1.5 12 Q12 2 22.5 12 Q12 22 1.5 12 Z", "w"), circle(12, 12, 4.6, "b"), circle(12, 12, 2.2, "k"), circle(10.6, 10.6, 1, "w"))
 sprite("i_jaw", I, path("M2 6 L22 6 L20 11 L4 11 Z", "s"), path("M4 14 L20 14 L22 19 L2 19 Z", "s"),
   poly([5, 11, 7, 14.5, 9, 11, 11, 14.5, 13, 11, 15, 14.5, 17, 11, 19, 14.5, 19, 11], "w"))
-sprite("i_star", I, star(12, 12.5, 5, 11, 4.8, "y"), star(12, 12.5, 5, 6, 2.6, { fill: "#fff3b8", opacity: 0.7 }))
+sprite("i_star", I, star(12, 12.5, 5, 11, 4.8, "y"), star(12, 12.5, 5, 6, 2.6, { fill: "y", opacity: 0.4 }))
 sprite("i_clock", I, circle(12, 12, 10, "w"), circle(12, 12, 10, { stroke: "S", sw: 1.6 }), path("M12 5.5 L12 12 L16.5 14.5", { stroke: "k", sw: 2 }))
 sprite("i_wing", I, path("M3 18 Q4 6 21 3 Q18 9 15 10 Q19 11 18 13 Q14 14 12 13 Q14 16 11 17 Q7 18 3 18 Z", "w"), curve([4, 17, 10, 11, 18, 5], { stroke: "s", sw: 1 }))
 sprite("i_skull", I, path("M12 2 Q21 2 21 11 Q21 15 17 16.5 L17 21 L7 21 L7 16.5 Q3 15 3 11 Q3 2 12 2 Z", "w"), sym(12, circle(8.3, 10.5, 2.6, "k")), poly([12, 13, 13.4, 16, 10.6, 16], "k"))
+
+// ---------- level goal + UI bits ----------
+sprite("chest", { w: 40, h: 34, outline: "k", ow: 1.6 },
+  rect(2, 14, 36, 18, { fill: "#a8652b", r: 2 }),
+  clip(rect(2, 14, 36, 18, "k"), rect(2, 26, 36, 6, "#7a431a"), rect(2, 14, 36, 3, "#d08a45")),
+  path("M2 15 Q2 3 20 3 Q38 3 38 15 Z", "#c27a37"),
+  clip(path("M2 15 Q2 3 20 3 Q38 3 38 15 Z", "k"), ellipse(14, 7, 10, 3, { fill: "#e6a463", opacity: 0.7 })),
+  rect(17, 3, 6, 29, "y"), rect(2, 13, 36, 3, "Y"),
+  rect(16, 15, 8, 8, { fill: "y", r: 1.5 }), circle(20, 19, 1.6, "k"))
+sprite("chest_open", { w: 40, h: 40, outline: "k", ow: 1.6 },
+  ellipse(20, 20, 16, 7, { fill: "#fff3b8", glow: { r: 8, color: "y", strength: 2 } }),
+  path("M4 18 Q4 4 20 2 Q36 4 36 18 Z", "#8a5426"), rect(17, 2, 6, 16, "Y"),
+  rect(2, 20, 36, 18, { fill: "#a8652b", r: 2 }),
+  clip(rect(2, 20, 36, 18, "k"), rect(2, 32, 36, 6, "#7a431a")),
+  circle(12, 20, 3.5, "#ff5a6e"), circle(20, 18, 4, "y"), circle(28, 20, 3.5, "#5fe08a"),
+  rect(17, 20, 6, 18, "y"), rect(2, 19, 36, 3, "Y"))
+sprite("arrow", { w: 24, h: 24, outline: "k", ow: 1.5 }, poly([4, 12, 15, 3, 15, 8, 21, 8, 21, 16, 15, 16, 15, 21], "w"))
+sprite("i_star_off", { base: "i_star", swap: { y: "#3a3340" } })
+
+// ---------- colour blocks: pop every touching block of the same colour ----------
+const BLOCKS = {
+  r: ["#e2474b", "#9e2633", "#ff8a86", (c) => circle(16, 16, 6, { fill: "none", stroke: c, sw: 3 })],
+  b: ["#3f8fe8", "#1f4f9e", "#8fc8ff", (c) => poly([16, 8.5, 23.5, 16, 16, 23.5, 8.5, 16], { fill: "none", stroke: c, sw: 3 })],
+  g: ["#4cbf5a", "#237a3a", "#a8f0a0", (c) => poly([16, 9, 23.5, 22, 8.5, 22], { fill: "none", stroke: c, sw: 3 })],
+  y: ["#f2b632", "#a86a12", "#ffe08a", (c) => rect(10, 10, 12, 12, { fill: "none", stroke: c, sw: 3, r: 1.5 })],
+}
+for (const [id, [m, d, l, mark]] of Object.entries(BLOCKS))
+  sprite(`blk_${id}`, { w: 32, h: 32 },
+    rect(0.5, 0.5, 31, 31, { fill: d, r: 5 }),
+    rect(2, 2, 28, 26.5, { fill: m, r: 4 }),
+    rect(4, 3.5, 24, 5, { fill: l, r: 2.5, opacity: 0.55 }),
+    mark(d),
+    circle(7, 24, 1.2, { fill: l, opacity: 0.5 }))
+sprite("oil", { w: 26, h: 30, outline: "k", ow: 1.5 },
+  rect(9, 1, 8, 4, { fill: "S", r: 1 }),
+  rect(3, 5, 20, 24, { fill: "#d9d2c3", r: 4 }),
+  rect(3, 5, 20, 24, { fill: lin(["#ffffff", "#8d857b"], 0), r: 4, opacity: 0.5 }),
+  circle(13, 18, 6.5, "#2b2440"),
+  path("M13 12 Q8.5 18 13 22 Q17.5 18 13 12 Z", { fill: "#ffd25a", glow: { r: 2.5, color: "o" } }),
+  rect(6, 8, 3, 18, { fill: "w", r: 1.5, opacity: 0.35 }))
