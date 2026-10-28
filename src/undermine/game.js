@@ -1,26 +1,40 @@
 (() => {
 "use strict";
 
+// Undermine: tap a block to hit it. Every hit is a swing, and when the swings run out the run is over.
+// Gems you dig up stay yours, so a failed run still buys a better pick for the next try.
+
 // ================= constants =================
 const COLS = 9;
-const E = 0, BLK = 1, ROCK = 2, BED = 4, CRATE = 7, OIL = 8, LAVA = 9;
-const HARDNESS = { [BLK]: 0.3, [ROCK]: 1.05, [CRATE]: 0.2, [OIL]: 0.15 };
-// coloured blocks come in four toughnesses: soft seams, normal, bolted and plated
-const TOUGH = [0.16, 0.3, 0.6, 0.95];
-const COLORS = ["r", "b", "g", "y"];
-const COLOR_HEX = { r: "#ff6a6e", b: "#5aa8ff", g: "#6fd16a", y: "#ffd25a" };
-const MOVE_T = 0.11, FALL_T0 = 0.14, FALL_TMIN = 0.08;
+const E = 0, DIRT = 1, STONE = 2, HARD = 3, BED = 4, GAS = 5, CRYSTAL = 6, TNT = 7, DYN = 8, APPLE = 9, LUNCH = 10, CHAMBER = 11;
+const BASE_HP = { [DIRT]: 2, [STONE]: 6, [HARD]: 14, [GAS]: 1, [CRYSTAL]: 2, [TNT]: 1, [DYN]: 1, [APPLE]: 2, [LUNCH]: 2 };
+const FOOD = { [APPLE]: 5, [LUNCH]: 12 };                 // swings each one gives back
 const GEM_KINDS = ["amber", "emerald", "sapphire", "ruby", "diamond"];
+const GEM_VALUE = [1, 2, 4, 8, 15];
+const GEMC = { amber: "#ffcf5a", emerald: "#5fe08a", sapphire: "#5aa8ff", ruby: "#ff5a6e", diamond: "#e8fbff" };
 const BIOMES = [
-  { id: "top", name: "Topsoil", dust: "#9c6b45", chip: "#a39b8f" },
-  { id: "clay", name: "Clay Beds", dust: "#c8693e", chip: "#b07c69" },
-  { id: "stone", name: "Old Stone", dust: "#86817a", chip: "#737b88" },
-  { id: "cryst", name: "Crystal Hollow", dust: "#5d4f8e", chip: "#56a8bb" },
-  { id: "magma", name: "Magma Veins", dust: "#66332b", chip: "#615654" },
-  { id: "abyss", name: "The Abyss", dust: "#2a3a52", chip: "#46527a" },
+  { id: "top", dust: "#9c6b45", chip: "#a39b8f" },
+  { id: "clay", dust: "#c8693e", chip: "#b07c69" },
+  { id: "stone", dust: "#86817a", chip: "#737b88" },
+  { id: "cryst", dust: "#5d4f8e", chip: "#56a8bb" },
+  { id: "magma", dust: "#66332b", chip: "#615654" },
+  { id: "abyss", dust: "#2a3a52", chip: "#46527a" },
 ];
 const ADJ = ["Crumbly", "Sticky", "Gloomy", "Glittering", "Rumbling", "Twisty", "Hollow", "Dusty", "Lucky", "Sneaky", "Bumpy", "Sleepy", "Deep", "Wobbly", "Shiny", "Muddy"];
 const NOUN = ["Burrow", "Pit", "Shaft", "Hollow", "Warren", "Seam", "Den", "Tunnel", "Vein", "Grotto", "Cellar", "Dig"];
+
+// the shop: what each level costs and does
+const UPGRADES = [
+  { id: "power", name: "Power", icon: "i_power", max: 99, base: 30, grow: 1.32 },
+  { id: "swings", name: "Swings", icon: "i_swings", max: 99, base: 25, grow: 1.32 },
+  { id: "luck", name: "Luck", icon: "i_clover", max: 8, base: 40, grow: 1.6 },
+  { id: "bombs", name: "Bombs", icon: "i_bomb", max: 5, base: 45, grow: 1.9 },
+];
+// power and swings never max out (prices flatten to +12% a level after 12), so the endless mines always have an answer
+for (const up of UPGRADES) up.cost = Array.from({ length: up.max }, (_, i) => Math.round(up.base * Math.pow(up.grow, Math.min(i, 12)) * Math.pow(1.12, Math.max(0, i - 12)) / 5) * 5);
+const pickDamage = (lv) => 2 + lv;
+const maxSwings = (lv) => 50 + lv * 10;
+const luckMul = (lv) => 1 + lv * 0.15;
 
 const COARSE = matchMedia("(pointer: coarse)").matches;
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -38,11 +52,17 @@ function vnoise(x, y, s) {
   const a = hash2(xi, yi, s), b = hash2(xi + 1, yi, s), c = hash2(xi, yi + 1, s), d = hash2(xi + 1, yi + 1, s);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
-function pickWeighted(list, r) { let tot = 0; for (const e of list) tot += e.w; let x = r * tot; for (const e of list) { x -= e.w; if (x <= 0) return e; } return list[list.length - 1]; }
 
 const store = {
-  get(k, d) { try { const v = localStorage.getItem("undermine2:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem("undermine2:" + k, JSON.stringify(v)); } catch {} },
+  get(k, d) { try { const v = localStorage.getItem("undermine3:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("undermine3:" + k, JSON.stringify(v)); } catch {} },
+};
+// everything that carries over between runs
+const save = {
+  gems: store.get("gems", 0),
+  lv: Object.assign({ power: 0, swings: 0, luck: 0, bombs: 0 }, store.get("lv", {})),
+  stars: store.get("stars", {}),
+  flush() { store.set("gems", this.gems); store.set("lv", this.lv); store.set("stars", this.stars); },
 };
 
 // ================= sprites =================
@@ -108,11 +128,12 @@ const lastPlay = {};
 function sfx(name, vol = 1, rate = 1) {
   if (!actx || muted || !BUF[name] || mode === "title") return;
   const now = actx.currentTime;
-  if (name !== "pop" && lastPlay[name] && now - lastPlay[name] < 0.03) return;
+  if (name !== "gem" && lastPlay[name] && now - lastPlay[name] < 0.03) return;
   lastPlay[name] = now;
   const src = actx.createBufferSource(); src.buffer = BUF[name]; src.playbackRate.value = rate;
   const g = actx.createGain(); g.gain.value = vol; src.connect(g); g.connect(master); src.start();
 }
+function uiSfx(name, vol = 0.7, rate = 1) { if (!actx || muted || !BUF[name]) return; const src = actx.createBufferSource(); src.buffer = BUF[name]; src.playbackRate.value = rate; const g = actx.createGain(); g.gain.value = vol; src.connect(g); g.connect(master); src.start(); }
 function setMuted(m) {
   muted = m; store.set("muted", m);
   if (master) master.gain.setTargetAtTime(m ? 0 : 0.9, actx.currentTime, 0.05);
@@ -122,39 +143,8 @@ function setMuted(m) {
 
 // ================= canvas =================
 const cv = $("cv"), ctx = cv.getContext("2d");
-const dk = document.createElement("canvas"), dctx = dk.getContext("2d");
-let hudBottom = 0;
-let W = 0, H = 0, DPR = 1, TS = 40, OX = 0, VIEW_H = 0, VIEW_ROWS = 14;
+let W = 0, H = 0, DPR = 1, TS = 40, OX = 0, VIEW_ROWS = 14, TOP = 0;
 const SHADOW = {};
-// soft blocks look crumbly and pale; bolted ones get a dark rim and rivets; plated ones a steel band too
-const TOUGH_OVER = [];
-function makeTough() {
-  const s = Math.max(8, Math.round(TS * DPR));
-  for (const k of [0, 2, 3]) {
-    const c = document.createElement("canvas"); c.width = c.height = s;
-    const g = c.getContext("2d"), q = s / 32;
-    if (k === 0) {
-      g.fillStyle = "rgba(255,255,255,.26)"; g.fillRect(2 * q, 2 * q, 28 * q, 28 * q);
-      g.fillStyle = "rgba(60,30,10,.28)";
-      for (let i = 0; i < 7; i++) { const a = hash2(i, 3, 9), b = hash2(i, 7, 9); g.beginPath(); g.arc((6 + a * 20) * q, (6 + b * 20) * q, (1 + hash2(i, 1, 2) * 1.2) * q, 0, 7); g.fill(); }
-    } else {
-      g.strokeStyle = "rgba(20,14,12,.72)"; g.lineWidth = 3.2 * q;
-      g.beginPath(); g.roundRect(3.5 * q, 3.5 * q, 25 * q, 25 * q, 4 * q); g.stroke();
-      if (k === 3) {
-        g.save(); g.beginPath(); g.roundRect(3.5 * q, 3.5 * q, 25 * q, 25 * q, 4 * q); g.clip();
-        g.fillStyle = "rgba(205,212,222,.82)"; g.translate(16 * q, 16 * q); g.rotate(-Math.PI / 4); g.fillRect(-20 * q, -3.2 * q, 40 * q, 6.4 * q);
-        g.fillStyle = "rgba(255,255,255,.55)"; g.fillRect(-20 * q, -3.2 * q, 40 * q, 1.4 * q);
-        g.restore();
-      }
-      for (const [x, y] of [[7.5, 7.5], [24.5, 7.5], [7.5, 24.5], [24.5, 24.5]]) {
-        g.fillStyle = "#2a2220"; g.beginPath(); g.arc(x * q, y * q, 2.6 * q, 0, 7); g.fill();
-        g.fillStyle = "#d9d2c8"; g.beginPath(); g.arc(x * q, y * q, 1.7 * q, 0, 7); g.fill();
-        g.fillStyle = "#fff"; g.beginPath(); g.arc((x - 0.5) * q, (y - 0.6) * q, 0.6 * q, 0, 7); g.fill();
-      }
-    }
-    TOUGH_OVER[k] = c;
-  }
-}
 function makeShadows() {
   const mk = (w, h, x0, y0, x1, y1, a) => {
     const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * DPR)); c.height = Math.max(1, Math.round(h * DPR));
@@ -169,605 +159,317 @@ function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
   W = window.innerWidth; H = window.innerHeight;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-  dk.width = Math.round(W / 2); dk.height = Math.round(H / 2);
-  VIEW_H = H;
-  TS = Math.floor(Math.min(W / (COLS + (W > 600 ? 0.6 : 0.1)), VIEW_H / 13));
+  TS = Math.floor(Math.min(W / (COLS + (W > 600 ? 0.6 : 0.1)), H / 12));
   TS = Math.max(24, TS);
   OX = Math.round((W - COLS * TS) / 2);
-  VIEW_ROWS = VIEW_H / TS;
+  VIEW_ROWS = H / TS;
+  const hud = $("hud"); TOP = hud && !hud.hidden ? hud.getBoundingClientRect().bottom : 0;
   rasterCache.clear();
-  makeShadows(); makeTough();
-  hudBottom = 0;
+  makeShadows();
 }
 window.addEventListener("resize", resize);
 
-// ================= input: hold the left or right half to steer =================
-const held = { L: 0, R: 0 };
-const tapped = { L: 0, R: 0 };   // a quick tap between two frames still counts
-let heldOrder = 0;
-const KEYMAP = { ArrowLeft: "L", KeyA: "L", ArrowRight: "R", KeyD: "R" };
+// ================= input: tap a block, drag to look around =================
+let downAt = null;
+cv.addEventListener("pointerdown", (e) => {
+  if (mode !== "play") return;
+  e.preventDefault(); initAudio();
+  downAt = { id: e.pointerId, x: e.clientX, y: e.clientY, cam: S.cam, drag: false, t: performance.now() };
+  try { cv.setPointerCapture(e.pointerId); } catch {}
+});
+cv.addEventListener("pointermove", (e) => {
+  if (mode === "play" && !COARSE) S.hover = cellAt(e.clientX, e.clientY);
+  if (!downAt || downAt.id !== e.pointerId) return;
+  const dy = e.clientY - downAt.y;
+  if (!downAt.drag && Math.abs(dy) > 10) downAt.drag = true;
+  if (downAt.drag) { S.free = true; S.cam = clampCam(downAt.cam - dy / TS); S.camT = S.cam; }
+});
+cv.addEventListener("pointerup", (e) => {
+  if (!downAt || downAt.id !== e.pointerId) return;
+  const d = downAt; downAt = null;
+  if (d.drag || mode !== "play") return;
+  const c = cellAt(e.clientX, e.clientY);
+  if (c) tapCell(c.x, c.y);
+});
+cv.addEventListener("pointercancel", () => { downAt = null; });
+cv.addEventListener("pointerleave", () => { if (S) S.hover = null; });
+cv.addEventListener("wheel", (e) => { if (mode !== "play") return; e.preventDefault(); S.free = true; S.camT = clampCam(S.camT + e.deltaY / TS * 0.6); }, { passive: false });
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+function cellAt(px, py) {
+  const x = Math.floor((px - OX) / TS), y = Math.floor(py / TS + S.cam);
+  if (x < 0 || x >= COLS || y < 0 || y > S.D) return null;
+  return { x, y };
+}
 window.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const d = KEYMAP[e.code];
-  if (d) { if (!held[d]) { held[d] = ++heldOrder; tapped[d] = performance.now(); } e.preventDefault(); return; }
   if (e.code === "Space" || e.code === "Enter") {
+    if (document.activeElement && document.activeElement.tagName === "BUTTON") return;
     e.preventDefault();
-    if (mode === "over" && overReady) (S.won ? startMine(S.mine + 1) : startMine(S.mine));
-    else if (mode === "title" && !$("btnPlay").hidden) startMine(nextMine());
+    if (mode === "title" && !$("btnPlay").hidden && $("shop").hidden) startMine(nextMine());
     else if (mode === "pause") resume();
     return;
   }
-  if (e.code === "KeyP" || e.code === "Escape") { if (mode === "play") pause(); else if (mode === "pause") resume(); return; }
+  if (e.code === "KeyB" && mode === "play") toggleBomb();
+  if (e.code === "KeyP" || e.code === "Escape") { if (!$("shop").hidden) closeShop(); else if (mode === "play") pause(); else if (mode === "pause") resume(); return; }
   if (e.code === "KeyM") setMuted(!muted);
 });
-window.addEventListener("keyup", (e) => { const d = KEYMAP[e.code]; if (d) held[d] = 0; });
-window.addEventListener("blur", () => { clearHeld(); if (mode === "play") pause(); });
+window.addEventListener("blur", () => { if (mode === "play") pause(); });
 document.addEventListener("visibilitychange", () => { if (document.hidden && mode === "play") pause(); });
-const pointers = new Map();
-function syncPointers() {
-  held.L = held.R = 0;
-  for (const [, p] of pointers) held[p.side] = Math.max(held[p.side], p.order);
-}
-cv.addEventListener("pointerdown", (e) => {
-  if (mode !== "play") return;
-  e.preventDefault();
-  const side = e.clientX < W / 2 ? "L" : "R";
-  pointers.set(e.pointerId, { side, order: ++heldOrder });
-  tapped[side] = performance.now();
-  try { cv.setPointerCapture(e.pointerId); } catch {}
-  syncPointers();
-});
-cv.addEventListener("pointermove", (e) => {
-  const p = pointers.get(e.pointerId); if (!p) return;
-  const side = e.clientX < W / 2 ? "L" : "R";
-  if (side !== p.side) { p.side = side; p.order = ++heldOrder; syncPointers(); }
-});
-for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) cv.addEventListener(ev, (e) => { pointers.delete(e.pointerId); syncPointers(); });
-cv.addEventListener("contextmenu", (e) => e.preventDefault());
-function clearHeld() { pointers.clear(); for (const k in held) held[k] = 0; for (const k in tapped) tapped[k] = 0; }
-
-function steer() {
-  let best = null, bo = 0;
-  for (const k of ["L", "R"]) if (held[k] && held[k] > bo) { bo = held[k]; best = k; }
-  if (!best) { const now = performance.now(); for (const k of ["L", "R"]) if (now - tapped[k] < 140) { best = k; tapped[k] = 0; } }
-  if (!best) return 0;
-  let dx = best === "L" ? -1 : 1;
-  if (S.fx.dizzy > 0) dx = -dx;
-  return dx;
-}
 
 // ================= mines: numbered, procedural, endless =================
-// The design in one line: digging straight down is the safe, slow, starving line. Oil cans sit off it,
-// every sideways step leaves something hanging over you, and loose blocks that land on their own colour pop again.
 function mineSpec(n) {
-  // difficulty ramps over ~30 mines, then holds; within every five it climbs, peaks on the 4th and eases off on the 5th
-  const wave = [-0.06, -0.02, 0.03, 0.08, -0.12][(n - 1) % 5];
-  const t = clamp((n - 1) / 30 + wave, 0, 1);
-  const breather = n % 5 === 0;
+  const t = clamp((n - 1) / 20, 0, 1);              // ramps over ~20 mines, then holds; the shop keeps pace after that
   const r = mulberry32(n * 7919 + 13);
   return {
     n, seed: (n * 2654435761) >>> 0, t,
     name: ADJ[(r() * ADJ.length) | 0] + " " + NOUN[(r() * NOUN.length) | 0],
-    depth: Math.round(Math.min(130, 58 + n * 3 + (n > 10 ? (n - 10) : 0))),
-    biome: Math.floor((n - 1) / 3) % BIOMES.length,
-    colors: 4,
-    clump: 0.34,                                      // chance a block copies a neighbour's colour (bigger groups, bigger collapses)
-    rock: n < 2 ? 0.02 : 0.04 + 0.05 * t,              // rocks are slow to dig and fall like everything else
-    slab: n < 3 ? 0 : 0.05 + 0.07 * t,                // bedrock ledges you have to go around
-    lava: n < 12 ? 0 : 0.004 + 0.008 * t,
-    caves: 0.86 - 0.06 * t,
-    crate: n < 4 ? 0 : 0.014,
-    gem: 0.07,
-    tank: 15,                                         // seconds a full lamp lasts
-    soft: 0.28 - 0.12 * t,                            // share of soft seams
-    tough: 0.14 + 0.2 * t,                            // share that is bolted or plated
-    plate: n < 4 ? 0 : 0.03 + 0.07 * t,               // share that is plated
-    oilEvery: breather ? 6 : 7,                  // rows between oil cans
-    wobble: 0.9 - 0.25 * t,
-    fallMax: 1.6 + 0.2 * t,                           // rows per second; you dig about 4, so a drop only catches you when you stall                           // warning time before loose blocks drop
+    depth: Math.round(Math.min(150, 30 + n * 6)),
+    biome: (n - 1) % BIOMES.length,
+    hpMul: 1 + 0.12 * (n - 1),                       // deeper mines have tougher rock: the shop is how you keep up
+    stone: 0.22 + 0.16 * t,                          // share of stone and of hard rock, more of both further down
+    hard: n < 2 ? 0.04 : 0.07 + 0.13 * t,
+    apple: 0.024 - 0.008 * t, lunch: 0.005,
+    tnt: 0.012, gas: n < 2 ? 0 : 0.05 + 0.04 * t, crystal: n < 3 ? 0 : 0.008, dyn: n < 4 ? 0 : 0.006,
+    ledge: n < 3 ? 0 : 0.03 + 0.04 * t,
+    gem: 0.075,
   };
 }
-
-// ================= crate effects (icons only, no reading) =================
-const GOOD = [
-  { id: "drill", icon: "i_drill", w: 3, t: 7 },
-  { id: "oil", icon: "oil", w: 3 },
-  { id: "boom", icon: "i_bomb", w: 2.5 },
-  { id: "magnet", icon: "i_magnet", w: 2, t: 10 },
-];
-const BAD = [
-  { id: "dizzy", icon: "i_dizzy", w: 2, t: 5 },
-  { id: "sore", icon: "i_sore", w: 2, t: 6 },
-  { id: "dark", icon: "i_dark", w: 2, t: 7 },
-  { id: "rockfall", icon: "i_rockfall", w: 1.5 },
-];
-const FX_META = Object.fromEntries([...GOOD, ...BAD].filter((e) => e.t).map((e) => [e.id, e]));
-const isBadFx = (id) => BAD.some((b) => b.id === id);
 
 // ================= run state =================
-let S = null, rnd = Math.random, mode = "title", overReady = false;
+let S = null, rnd = Math.random, mode = "title";
 
-function newMine(n) {
+function newMine(n, demo) {
   const spec = mineSpec(n);
   rnd = mulberry32(spec.seed);
+  const D = spec.depth;
   S = {
-    spec, mine: n, rows: [], D: spec.depth,
-    P: { x: 4, y: -1, fromX: 4, fromY: -1, mv: 1, mvDur: MOVE_T, moving: false, falling: false, fallN: 0, face: 1,
-      dig: null, digAnim: 0, digTick: 0, squash: 0, blink: 2, hurtT: 0, inv: 0, dead: false, stuck: 0 },
-    maxDepth: 0, gems: 0, gemsTotal: 0, chain: 0, bestChain: 0, hurt: 0, hearts: 3, cause: "",
-    oil: 100, burn: 100 / spec.tank,
-    combo: 0, comboT: 0, bestCombo: 0, cans: 0, oilFrom: { can: 0, combo: 0, chain: 0, crate: 0 },
-    fx: { drill: 0, magnet: 0, dizzy: 0, sore: 0, dark: 0 },
-    pops: [], popT: 0, popN: 0, popColor: 0, wobbles: [], wobKey: new Set(), quick: new Map(), bodies: [], dirty: true, settleT: 0,
-    lavaT: new Map(), parts: [], floats: [], icons: [], flashes: [],
-    shake: 0, hitstop: 0, time: 0, cam: -4.5, won: false, wonT: 0, magnetT: 0, flash: 0, flashC: "#fff",
+    spec, mine: n, D, demo: !!demo,
+    t: new Uint8Array(COLS * (D + 3)), hp: new Float32Array(COLS * (D + 3)), max: new Float32Array(COLS * (D + 3)),
+    g: new Uint8Array(COLS * (D + 3)), v: new Uint8Array(COLS * (D + 3)),
+    P: { x: 4, y: -1, fx: 4, fy: -1, ox: 4, oy: -1, mv: 1, face: 1, swing: 0, sdx: 0, sdy: 1, blink: 2, cheer: 0 },
+    dmg: pickDamage(save.lv.power), swings: maxSwings(save.lv.swings), maxSw: maxSwings(save.lv.swings),
+    luck: luckMul(save.lv.luck), bombs: save.lv.bombs, armed: false,
+    runGems: 0, gemCount: 0, gemTotal: 0, deepest: 0, eaten: 0,
+    fuses: [], bolts: [], parts: [], floats: [], icons: [], flashes: [], hits: new Map(),
+    shake: 0, flash: 0, flashC: "#fff", time: 0, cam: -3, camT: -3, free: false, hover: null,
+    won: false, over: false, endT: 0,
   };
-  for (let y = 0; y <= S.D + 2; y++) genRow(y);
-  toughen();
-  placeOil();
-  presettle();
-  for (let y = 0; y < S.D; y++) for (let x = 0; x < COLS; x++) if (S.rows[y].t[x] === BLK && S.rows[y].g[x]) S.gemsTotal++;
-  // star targets
-  S.gemGoal = Math.max(3, Math.round(S.gemsTotal * 0.3));
+  genMine();
 }
-// split the toughness noise by share, so every mine gets the mix its spec asks for
-function toughen() {
-  const sp = S.spec, vals = [];
-  for (let y = 0; y < S.D; y++) for (let x = 0; x < COLS; x++) vals.push(S.rows[y].k[x]);
-  vals.sort((a, b) => a - b);
-  const at = (f) => vals[Math.min(vals.length - 1, Math.floor(f * vals.length))];
-  const soft = at(sp.soft), bolt = at(1 - sp.tough), plate = at(1 - sp.plate);
-  for (let y = 0; y <= S.D + 2; y++) for (let x = 0; x < COLS; x++) {
-    const r = S.rows[y], v = r.k[x];
-    r.k[x] = y < 3 || y >= S.D ? 1 : v < soft ? 0 : v >= plate && sp.plate > 0 ? 3 : v >= bolt ? 2 : 1;
-  }
-}
-// oil cans sit off the lazy line: never in the column you start in, and never two in a row in the same column
-function placeOil() {
-  const sp = S.spec;
-  let last = 4;
-  for (let y = 5; y < S.D - 3; y += sp.oilEvery) {
-    const yy = y + ((rnd() * 3) | 0) - 1;
-    let x;
-    do x = (rnd() * COLS) | 0; while (x === 4 || x === last || Math.abs(x - last) > 5);
-    last = x;
-    S.rows[yy].t[x] = OIL; S.rows[yy].g[x] = 0;
-  }
-}
-
-// ================= world =================
-function rowAt(y) { return S.rows[y]; }
+const K = (x, y) => y * COLS + x;
 function get(x, y) {
   if (x < 0 || x >= COLS) return BED;
   if (y < 0) return E;
-  if (y >= S.rows.length) return BED;
-  return S.rows[y].t[x];
+  if (y > S.D + 2) return BED;
+  return S.t[K(x, y)];
 }
-function setT(x, y, t) { if (x < 0 || x >= COLS || y < 0 || y >= S.rows.length) return; const r = S.rows[y]; r.t[x] = t; r.hp[x] = 0; if (t !== BLK) r.g[x] = 0; S.dirty = true; }
+function setT(x, y, t) { const k = K(x, y); S.t[k] = t; S.hp[k] = S.max[k] = t === E || t === BED || t === CHAMBER ? 0 : Math.max(1, Math.round(BASE_HP[t] * (t <= HARD ? S.spec.hpMul : 1))); }
 
-function genRow(y) {
-  const sp = S.spec;
-  const r = { t: new Uint8Array(COLS), hp: new Float32Array(COLS), c: new Uint8Array(COLS), g: new Uint8Array(COLS), v: new Uint8Array(COLS), k: new Uint8Array(COLS) };
-  S.rows[y] = r;
-  for (let x = 0; x < COLS; x++) r.v[x] = (hash2(x, y, sp.seed) * 2) | 0;
-  if (y === S.D) return;                                       // the treasure chamber: open floor
-  if (y > S.D) { r.t.fill(BED); return; }
-  const up = y > 0 ? S.rows[y - 1] : null;
-  for (let x = 0; x < COLS; x++) {
-    let t = BLK;
-    const cave = vnoise(x * 0.45, y * 0.22, sp.seed) * 0.65 + vnoise(x * 0.9 + 50, y * 0.5, sp.seed + 7) * 0.35;
-    if (y > 4 && y < S.D - 2 && cave > sp.caves) t = E;
-    else if (y > 2) {
-      const q = rnd();
-      if (q < sp.rock) t = ROCK;
-      else if (q < sp.rock + sp.crate) t = CRATE;
-      else if (y > 4 && q < sp.rock + sp.crate + sp.lava) t = LAVA;
-    }
-    r.t[x] = t;
-    // colour: clump with the block to the left or above so chains form
-    let c = (rnd() * sp.colors) | 0;
-    const q = rnd();
-    if (q < sp.clump) {
-      const left = x > 0 && r.t[x - 1] === BLK, top = up && up.t[x] === BLK;
-      if (left && (!top || rnd() < 0.5)) c = r.c[x - 1];
-      else if (top) c = up.c[x];
-    }
-    r.c[x] = c;
-    // toughness comes in bands and seams, so there is a route worth finding
-    const n = vnoise(x * 0.38 + 200, y * 0.16, sp.seed + 3) * 0.7 + vnoise(x * 0.9 + 90, y * 0.45, sp.seed + 11) * 0.3;
-    r.k[x] = clamp(Math.round(n * 255), 0, 255);                 // a noise value for now; toughen() turns it into a level
-    if (t === BLK && y > 0 && rnd() < sp.gem) r.g[x] = 1 + Math.min(4, Math.floor(rnd() * (1.5 + sp.t * 3.5)));
+function genMine() {
+  const sp = S.spec, D = S.D, f = (y) => y / D;
+  // rock type comes from noise plus a pull toward the bottom, split by share so every mine gets its mix
+  const score = [];
+  for (let y = 0; y < D; y++) for (let x = 0; x < COLS; x++) {
+    const n = vnoise(x * 0.42, y * 0.2, sp.seed) * 0.7 + vnoise(x * 1.1 + 40, y * 0.55, sp.seed + 5) * 0.3;
+    score.push({ k: K(x, y), y, s: n + f(y) * 0.15 });
   }
-  if (sp.slab && y > 6 && y < S.D - 3 && rnd() < sp.slab) {
-    const len = 2 + ((rnd() * 4) | 0), x0 = (rnd() * (COLS - len + 1)) | 0;
-    for (let x = x0; x < x0 + len; x++) r.t[x] = BED;
+  const sorted = score.map((q) => q.s).sort((a, b) => a - b);
+  const at = (q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+  const hardT = at(1 - sp.hard), stoneT = at(1 - sp.hard - sp.stone);
+  for (const q of score) {
+    const x = q.k % COLS;
+    let t = q.y < 2 ? DIRT : q.s >= hardT ? HARD : q.s >= stoneT ? STONE : DIRT;
+    S.v[q.k] = (hash2(x, q.y, sp.seed) * 2) | 0;
+    if (q.y >= 2) {
+      const gasN = vnoise(x * 0.7 + 300, q.y * 0.7, sp.seed + 9);
+      const r = rnd();
+      if (sp.gas && gasN > 1 - sp.gas * 2.2 && q.y > 4) t = GAS;
+      else if (r < sp.tnt) t = TNT;
+      else if (r < sp.tnt + sp.crystal) t = CRYSTAL;
+      else if (r < sp.tnt + sp.crystal + sp.dyn) t = DYN;
+      else if (t === DIRT && r < sp.tnt + sp.crystal + sp.dyn + sp.lunch) t = LUNCH;
+      else if (t === DIRT && r < sp.tnt + sp.crystal + sp.dyn + sp.lunch + sp.apple) t = APPLE;
+    }
+    setT(x, q.y, t);
+    // gems: richer in hard rock and further down
+    if ((t === DIRT || t === STONE || t === HARD) && q.y > 0 && rnd() < sp.gem * (t === HARD ? 1.8 : t === STONE ? 1.3 : 1)) {
+      const tier = clamp(Math.floor(rnd() * 2 + f(q.y) * 1.5 + sp.t * 0.8 + (t === HARD ? 1.5 : t === STONE ? 0.6 : 0)), 0, 4);
+      S.g[q.k] = tier + 1; S.gemTotal++;
+    }
   }
-  if (up) for (let x = 0; x < COLS; x++) if (r.t[x] === E && up.t[x] === LAVA) up.t[x] = E;
+  // short bedrock ledges to go round
+  for (let y = 6; y < D - 3; y++) if (sp.ledge && rnd() < sp.ledge) {
+    const len = 2 + ((rnd() * 2) | 0), x0 = (rnd() * (COLS - len + 1)) | 0;
+    for (let x = x0; x < x0 + len; x++) { setT(x, y, BED); S.g[K(x, y)] = 0; }
+  }
+  for (let x = 0; x < COLS; x++) { setT(x, D, CHAMBER); setT(x, D + 1, BED); setT(x, D + 2, BED); }
+  S.gemGoal = Math.max(3, Math.round(S.gemTotal * 0.3));
 }
 
-// ================= gravity: loose blocks wobble, then drop =================
-// Touching blocks of one colour stick together; rocks, crates and oil cans are loose singles.
-// A group stays up while any of its cells rests on something that isn't part of it. The mole holds nothing up.
-const FALLS = (t) => t === BLK || t === ROCK || t === CRATE || t === OIL;
-function groupAt(x, y) {
+// a block can be hit when it touches open space (or the sky)
+function exposed(x, y) {
   const t = get(x, y);
-  if (!FALLS(t) || y >= S.D) return null;
-  if (t !== BLK) return [[x, y]];
-  const c = S.rows[y].c[x], seen = new Set([y * COLS + x]), out = [[x, y]];
-  for (let i = 0; i < out.length; i++) {
-    const [cx, cy] = out[i];
-    for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = cx + ax, ny = cy + ay, k = ny * COLS + nx;
-      if (nx < 0 || nx >= COLS || ny < 0 || ny >= S.D || seen.has(k)) continue;
-      const r = S.rows[ny];
-      if (r.t[nx] === BLK && r.c[nx] === c) { seen.add(k); out.push([nx, ny]); }
-    }
-  }
-  return out;
+  if (t === E || t === BED || t === CHAMBER) return false;
+  if (y === 0) return true;
+  return get(x - 1, y) === E || get(x + 1, y) === E || get(x, y - 1) === E || get(x, y + 1) === E;
 }
-function supported(cells) {
-  const own = new Set(cells.map(([x, y]) => y * COLS + x));
-  for (const [x, y] of cells) {
-    if (y + 1 >= S.D) return true;
-    if (own.has((y + 1) * COLS + x)) continue;
-    if (S.rows[y + 1].t[x] !== E) return true;
-  }
-  return false;
-}
-// mines are made settled: anything generated over a pocket drops into it straight away, quietly
-function presettle() {
-  for (let pass = 0; pass < 60; pass++) {
-    let moved = false;
-    const seen = new Set();
-    for (let y = S.D - 1; y >= 0; y--) for (let x = 0; x < COLS; x++) {
-      if (seen.has(y * COLS + x)) continue;
-      const g = groupAt(x, y); if (!g) continue;
-      for (const [gx, gy] of g) seen.add(gy * COLS + gx);
-      if (supported(g)) continue;
-      const cells = g.map(([gx, gy]) => ({ x: gx, y: gy, t: S.rows[gy].t[gx], c: S.rows[gy].c[gx], g: S.rows[gy].g[gx], k: S.rows[gy].k[gx] }));
-      for (const q of cells) { S.rows[q.y].t[q.x] = E; S.rows[q.y].g[q.x] = 0; }
-      let d = 0;
-      while (cells.every((q) => q.y + d + 1 < S.D && S.rows[q.y + d + 1].t[q.x] === E)) d++;
-      for (const q of cells) { const r = S.rows[q.y + d]; r.t[q.x] = q.t; r.c[q.x] = q.c; r.g[q.x] = q.g; r.k[q.x] = q.k; }
-      moved = true;
-    }
-    if (!moved) break;
-  }
-}
-function settle() {
-  const top = Math.max(0, Math.floor(S.cam) - 10), bot = Math.min(S.D, Math.ceil(S.cam + VIEW_ROWS) + 6);
-  const seen = new Set();
-  for (let y = bot - 1; y >= top; y--) for (let x = 0; x < COLS; x++) {
-    const k = y * COLS + x;
-    if (seen.has(k) || S.wobKey.has(k)) continue;
-    const g = groupAt(x, y); if (!g) continue;
-    for (const [gx, gy] of g) seen.add(gy * COLS + gx);
-    if (g.some(([gx, gy]) => S.wobKey.has(gy * COLS + gx) || S.pops.some((p) => p.x === gx && p.y === gy))) continue;
-    if (supported(g)) continue;
-    // something just fell out from under it: it goes with it instead of waiting its turn
-    const quick = g.some(([gx, gy]) => S.quick.has((gy + 1) * COLS + gx));
-    S.wobbles.push({ cells: g, t: quick ? 0.05 : S.spec.wobble, max: quick ? 0.05 : S.spec.wobble });
-    for (const [gx, gy] of g) S.wobKey.add(gy * COLS + gx);
-    if (!quick && mode !== "title") sfx("wobble", 0.5, 0.9 + rnd() * 0.3);
-  }
-}
-function dropGroup(w) {
-  // re-check: digging or a landing may have changed it while it shook
-  const live = w.cells.find(([x, y]) => FALLS(get(x, y)));
-  if (!live) return;
-  const g = groupAt(live[0], live[1]);
-  if (!g || supported(g)) return;
-  const cells = g.map(([x, y]) => { const r = S.rows[y]; return { x, y, t: r.t[x], c: r.c[x], g: r.g[x], k: r.k[x] }; });
-  for (const q of cells) { setT(q.x, q.y, E); S.quick.set(q.y * COLS + q.x, 0.15); }
-  S.bodies.push({ cells, d: 0, vy: 1 });
-  S.dirty = true;
-}
-function moleCell() {
-  const P = S.P;
-  return P.moving && P.mv < 0.5 ? { x: P.fromX, y: P.fromY } : { x: P.x, y: P.y };
-}
-function updateGravity(dt) {
-  for (const [k, v] of S.quick) { if (v - dt <= 0) S.quick.delete(k); else S.quick.set(k, v - dt); }
-  S.settleT -= dt;
-  if (S.dirty && S.settleT <= 0) { S.dirty = false; S.settleT = 1 / 30; settle(); }
-  for (let i = S.wobbles.length - 1; i >= 0; i--) {
-    const w = S.wobbles[i];
-    w.t -= dt;
-    if (w.t > 0) continue;
-    S.wobbles.splice(i, 1);
-    for (const [x, y] of w.cells) S.wobKey.delete(y * COLS + x);
-    dropGroup(w);
-  }
-  const P = S.P, pc = moleCell();
-  for (let i = S.bodies.length - 1; i >= 0; i--) {
-    const b = S.bodies[i];
-    b.vy = Math.min(S.spec.fallMax, b.vy + 7 * dt);
-    let nd = b.d + b.vy * dt, landed = false;
-    // step one row at a time so nothing tunnels
-    while (Math.floor(nd) > Math.floor(b.d)) {
-      const next = Math.floor(b.d) + 1;
-      if (b.cells.some((q) => q.y + next >= S.D || get(q.x, q.y + next) !== E)) { landed = true; nd = Math.floor(b.d); break; }
-      b.d = next;
-    }
-    b.d = nd;
-    if (!P.dead && !S.won && b.cells.some((q) => q.x === pc.x && Math.abs(q.y + b.d - pc.y) < 0.55)) { crush(b); S.bodies.splice(i, 1); continue; }
-    if (landed) { land(b); S.bodies.splice(i, 1); }
-  }
-}
-function land(b) {
-  const d = Math.floor(b.d);
-  let heavy = false;
-  for (const q of b.cells) {
-    const y = q.y + d, r = S.rows[y];
-    r.t[q.x] = q.t; r.c[q.x] = q.c; r.g[q.x] = q.g; r.k[q.x] = q.k; r.hp[q.x] = 0;
-    if (q.t !== BLK) heavy = true;
-  }
-  if (mode !== "title") sfx(heavy ? "crash" : "land", heavy ? 0.6 : 0.45, 0.9 + rnd() * 0.2);
-  if (b.cells.length > 2 || heavy) shake(0.12);
-  for (const q of b.cells) if (!b.cells.some((o) => o.x === q.x && o.y === q.y + 1)) burst(q.x + 0.5, q.y + d + 1, 3, BIOMES[S.spec.biome].dust, 1.6);
-  // the payoff: a loose group landing on its own colour makes 4+ and pops again
-  const done = new Set();
-  for (const q of b.cells) {
-    if (q.t !== BLK) continue;
-    const y = q.y + d, k = y * COLS + q.x;
-    if (done.has(k) || S.pops.some((p) => p.x === q.x && p.y === y)) continue;
-    const g = groupAt(q.x, y);
-    for (const [gx, gy] of g) done.add(gy * COLS + gx);
-    if (g.length >= 4 && g.length > b.cells.filter((o) => o.t === BLK && o.c === q.c).length) chainPop(q.x, y, true);
-  }
-  S.dirty = true;
-}
-function crush(b) {
-  const pc = moleCell(), d = b.d;
-  for (const q of b.cells) {
-    if (q.t === BLK && q.g) collectGem(q.x, Math.round(q.y + d), q.g - 1);
-    burst(q.x + 0.5, q.y + d + 0.5, 8, q.t === BLK ? COLOR_HEX[COLORS[q.c]] : "#8d857b", 3.2);
-  }
-  sfx("crash", 0.9);
-  burst(pc.x + 0.5, pc.y, 14, "#8d857b", 3.5);
-  hurt("crush");
-  S.dirty = true;
-}
+const hitsLeft = (x, y) => Math.ceil(S.hp[K(x, y)] / S.dmg);
 
-// ================= player =================
-function digMul() {
-  let m = 1;
-  if (S.fx.drill > 0) m *= 3;
-  if (S.fx.sore > 0) m *= 0.45;
-  return m;
-}
-function startMove(dx, dy, dur) {
-  const P = S.P;
-  P.fromX = P.x; P.fromY = P.y; P.x += dx; P.y += dy; P.mv = 0; P.mvDur = dur; P.moving = true;
-  if (P.y > S.maxDepth) S.maxDepth = P.y;
-}
-function updatePlayer(dt) {
-  const P = S.P;
-  if (P.dead || S.won) return;
-  P.inv = Math.max(0, P.inv - dt);
-  P.squash = Math.max(0, P.squash - dt * 4);
-  P.hurtT = Math.max(0, P.hurtT - dt);
-  P.blink -= dt; if (P.blink < -0.12) P.blink = 2 + rnd() * 3;
-  if (P.moving) {
-    P.mv += dt / P.mvDur;
-    if (P.mv >= 1) { P.mv = 1; P.moving = false; if (P.y >= S.D) { win(); return; } }
-    else return;
-  }
-  const below = get(P.x, P.y + 1);
-  if (below === E) {
-    P.falling = true; P.fallN++;
-    startMove(0, 1, Math.max(FALL_TMIN, FALL_T0 - P.fallN * 0.008));
-    return;
-  }
-  if (P.falling) {
-    P.falling = false;
-    if (P.fallN > 1) { P.squash = Math.min(1, 0.3 + P.fallN * 0.08); sfx("land", Math.min(1, 0.4 + P.fallN * 0.08)); burst(P.x + 0.5, P.y + 1, 6, BIOMES[S.spec.biome].dust, 2); if (P.fallN > 5) shake(0.15); }
-    P.fallN = 0;
-  }
-  // steering wins; otherwise dig straight down
-  let dx = steer(), dy = 0;
-  if (dx) {
-    P.face = dx;
-    const tx = P.x + dx;
-    if (tx < 0 || tx >= COLS || get(tx, P.y) === BED) { dx = 0; }
-  }
-  if (!dx) dy = 1;
-  const tx = P.x + dx, ty = P.y + dy;
-  const t = get(tx, ty);
-  if (t === E) { P.dig = null; P.stuck = 0; startMove(dx, dy, MOVE_T); if (dx) sfx("step", 0.6, 0.9 + rnd() * 0.3); return; }
-  if (t === LAVA) { if (dy) P.stuck += dt; hurt("lava"); P.dig = null; return; }
-  if (t === BED) { P.stuck += dt; P.dig = null; return; }
-  P.stuck = 0;
-  if (S.pops.some((p) => p.x === tx && p.y === ty)) { P.dig = null; return; }   // already popping
-  const r = S.rows[ty];
-  if (!P.dig || P.dig.x !== tx || P.dig.y !== ty) { P.dig = { x: tx, y: ty, dx, dy }; P.digTick = 0.06; }
-  r.hp[tx] += dt * digMul() / (t === BLK ? TOUGH[r.k[tx]] : HARDNESS[t]);
-  P.digAnim += dt * (S.fx.drill > 0 ? 2.2 : 1);
-  P.digTick += dt;
-  if (P.digTick >= (S.fx.drill > 0 ? 0.06 : 0.11)) {
-    P.digTick = 0;
-    const cx = tx + 0.5 - dx * 0.45, cy = ty + 0.5 - dy * 0.45 + (dy ? 0 : 0.1);
-    if (t === ROCK || (t === BLK && r.k[tx] >= 2)) { sfx("chip", 0.7, 0.9 + rnd() * 0.25); burst(cx, cy, 2, BIOMES[S.spec.biome].chip, 2.2); }
-    else { sfx("dig" + (1 + ((rnd() * 3) | 0)), 0.6); burst(cx, cy, 2, t === BLK ? COLOR_HEX[COLORS[r.c[tx]]] : "#b77a3c", 2); }
-  }
-  if (r.hp[tx] >= 1) {
-    r.hp[tx] = 0; P.dig = null;
-    if (t === BLK) chainPop(tx, ty);
-    else breakTile(tx, ty, "dig");
-  }
-}
-
-// ================= the twist: colour chains =================
-function chainPop(x0, y0, cascade) {
-  const c = S.rows[y0].c[x0];
-  const seen = new Set([y0 * COLS + x0]);
-  const q = [[x0, y0, 0]];
-  const list = [];
-  while (q.length) {
-    const [x, y, d] = q.shift();
-    list.push({ x, y, d });
-    for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = x + ax, ny = y + ay;
-      if (nx < 0 || nx >= COLS || ny < 0 || ny >= S.D) continue;
-      const k = ny * COLS + nx;
-      if (seen.has(k)) continue;
-      const r = S.rows[ny];
-      if (r.t[nx] === BLK && r.c[nx] === c) { seen.add(k); q.push([nx, ny, d + 1]); }
-    }
-  }
-  const n = list.length;
-  S.chain = n; S.bestChain = Math.max(S.bestChain, n);
-  const step = n > 20 ? 0.025 : 0.04;
-  for (const p of list) S.pops.push({ x: p.x, y: p.y, t: p.d * step + (cascade ? 0.08 : 0), c, n, i: 0 });
-  S.popN = 0;
-  const col = COLOR_HEX[COLORS[c]];
-  if (cascade) {
-    // the real payoff: drops that land on their colour. Each one in a row is worth more.
-    S.combo++; S.comboT = 1.2; S.bestCombo = Math.max(S.bestCombo, S.combo);
-    const gain = Math.min(10, (1 + n * 0.3) * (1 + (S.combo - 1) * 0.25));
-    S.oil = Math.min(100, S.oil + gain); S.oilFrom.combo += gain;
-    const big = S.combo >= 3 || n >= 10;
-    S.icons.push({ x: x0 + 0.5, y: y0 + 0.2, txt: S.combo > 1 ? "Combo ×" + S.combo : "Combo!", c: col, t: 0, max: 1.3, sc: big ? 1.7 : 1.3 });
-    S.icons.push({ x: x0 + 0.5, y: y0 + 1.1, txt: "+", c: "#ffd25a", icon: "oil", t: 0, max: 1.1, sc: 1 });
-    if (mode !== "title") setTimeout(() => sfx("bigchain", 0.8, Math.min(1.8, 1 + (S.combo - 1) * 0.15)), 120);
-    shake(big ? 0.35 : 0.18);
-    if (big) flashScreen(col, 0.16);
-    return;
-  }
-  // digging into a big group gives no oil, just speed: the hole it leaves is the point
-  if (n >= 6) {
-    const big = n >= 12;
-    S.icons.push({ x: x0 + 0.5, y: y0 + 0.3, txt: "×" + n, c: col, t: 0, max: big ? 1.4 : 1.1, sc: big ? 1.9 : 1.3 });
-    if (mode !== "title") setTimeout(() => sfx("bigchain", big ? 0.8 : 0.5, big ? 1 : 1.12), Math.min(600, n * step * 1000));
-    if (big) shake(0.25);
-  }
-}
-function updatePops(dt) {
-  for (let i = S.pops.length - 1; i >= 0; i--) {
-    const p = S.pops[i];
-    p.t -= dt;
-    if (p.t > 0) continue;
-    S.pops.splice(i, 1);
-    const r = S.rows[p.y];
-    if (r.t[p.x] !== BLK) continue;
-    if (r.g[p.x]) collectGem(p.x, p.y, r.g[p.x] - 1);
-    setT(p.x, p.y, E);
-    S.popN++;
-    sfx("pop", 0.55, Math.min(2.4, Math.pow(2, S.popN / 14)));
-    const col = COLOR_HEX[COLORS[p.c]];
-    for (let k = 0; k < 7; k++) { const a = rnd() * Math.PI * 2, sp = 2 + rnd() * 4; S.parts.push({ x: p.x + 0.5, y: p.y + 0.5, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5, life: 0.5 + rnd() * 0.3, max: 0.8, c: col, s: 0.1 + rnd() * 0.08, g: 14, glow: k < 2 }); }
-    S.flashes.push({ x: p.x + 0.5, y: p.y + 0.5, r: 1.2, t: 0.15, max: 0.15 });
-  }
-}
-
-function hurt(cause) {
-  const P = S.P;
-  if (P.inv > 0 || P.dead) return;
-  S.hearts--; S.hurt++;
-  P.inv = 1.6; P.hurtT = 0.5;
-  sfx(cause === "lava" ? "sizzle" : "hurt"); if (cause === "lava") sfx("hurt", 0.7);
-  shake(0.5); S.hitstop = 0.1; flashScreen("#e2474b", 0.35);
-  S.icons.push({ x: P.x + 0.5, y: P.y - 0.3, icon: "i_heart_empty", ring: "#e2474b", t: 0, max: 1.1, sc: 1.3 });
-  if (S.hearts <= 0) outOfOil(cause);
-}
-function outOfOil(cause = "oil") {
-  const P = S.P;
-  if (P.dead || S.won) return;
-  P.dead = true; S.cause = cause;
-  sfx("powerdown", 0.9);
-  const run = S;
-  setTimeout(() => { if (S === run) sfx("gameover", 0.8); }, 400);
-  setTimeout(() => { if (S === run) showResult(); }, 1500);
-}
-function win() {
-  const P = S.P;
-  if (S.won) return;
-  S.won = true; S.wonT = 0;
-  sfx("win", 0.9); sfx("crate", 0.7);
-  for (let i = 0; i < 60; i++) { const a = -Math.PI / 2 + (rnd() - 0.5) * 2.2, sp = 4 + rnd() * 8; S.parts.push({ x: 4.5, y: S.D + 0.4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1 + rnd() * 0.8, max: 1.8, c: Object.values(COLOR_HEX)[i % 4], s: 0.1 + rnd() * 0.1, g: 14, glow: i % 3 === 0 }); }
-  shake(0.3);
-  const run = S;
-  setTimeout(() => { if (S === run) showResult(); }, 1400);
-}
-
-// ================= tiles breaking =================
-function breakTile(x, y, cause) {
-  const t = get(x, y); if (t === E || t === BED && cause === "dig") return;
+// ================= tapping =================
+function tapCell(x, y) {
+  if (S.won || S.over) return;
+  if (!exposed(x, y)) { if (get(x, y) !== E) nope(x, y); return; }
+  S.free = false;
+  if (S.armed) { placeBomb(x, y); return; }
+  if (S.swings <= 0) return;
+  S.swings--;
+  moveNextTo(x, y);
+  const k = K(x, y), t = S.t[k];
+  S.hp[k] -= S.dmg;
+  S.hits.set(k, 0.12);
   const B = BIOMES[S.spec.biome];
-  setT(x, y, E);
   const cx = x + 0.5, cy = y + 0.5;
-  if (t === ROCK || t === BED) { sfx("break", 0.8, 0.9 + rnd() * 0.2); burst(cx, cy, 10, B.chip, 3.2); }
-  else if (t === LAVA) burst(cx, cy, 8, "#ffb040", 3);
-  else { burst(cx, cy, 8, "#b77a3c", 2.6); }
-  if (t === CRATE) openCrate(x, y);
-  if (t === OIL) { S.oil = Math.min(100, S.oil + 45); S.oilFrom.can += 45; S.cans++; sfx("heart", 0.8); S.icons.push({ x: cx, y: y, txt: "+", c: "#ffd25a", icon: "oil", t: 0, max: 1.1, sc: 1.3 }); }
+  if (t === STONE || t === HARD) { sfx(t === HARD ? "clank" : "chip", 0.8, 0.9 + rnd() * 0.25); burst(cx, cy, 4, B.chip, 2.4); }
+  else { sfx("dig" + (1 + ((rnd() * 3) | 0)), 0.7); burst(cx, cy, 4, B.dust, 2); }
+  if (S.hp[k] <= 0) breakCell(x, y, "dig");
+  else if (hitsLeft(x, y) >= 1) S.icons.push({ x: cx, y: y + 0.15, txt: String(hitsLeft(x, y)), c: "#fff4dc", t: 0, max: 0.55, sc: 0.75 });
+  if (S.swings <= 0) checkOut();
 }
-function collectGem(x, y, g) {
-  S.gems++;
-  sfx("gem", 0.6, 1 + Math.min(0.6, S.popN * 0.03));
-  sparkle(x + 0.5, y + 0.5, GEM_KINDS[g]);
-  S.floats.push({ x: x + 0.5, y: y + 0.5, gem: GEM_KINDS[g], t: 0, max: 0.6 });
+function nope(x, y) {
+  S.hits.set(K(x, y), -0.18);
+  sfx("click", 0.5, 0.7);
 }
-function openCrate(x, y) {
-  sfx("crate");
-  const good = rnd() < clamp(0.72 - S.spec.t * 0.15, 0.5, 0.9);
-  const e = pickWeighted(good ? GOOD : BAD, rnd());
-  setTimeout(() => sfx(good ? "powerup" : "powerdown", 0.85), 100);
-  burst(x + 0.5, y + 0.5, 14, good ? "#7fe08a" : "#c77dff", 3);
-  S.icons.push({ x: S.P.x + 0.5, y: S.P.y - 0.4, icon: e.icon, ring: good ? "#7fe08a" : "#c77dff", t: 0, max: 1.3, sc: 1.6 });
-  if (e.t) S.fx[e.id] = Math.max(S.fx[e.id], e.t);
-  if (e.id === "oil") S.oil = Math.min(100, S.oil + 35);
-  if (e.id === "boom") explode(S.P.x, S.P.y + 2, 1);
-  if (e.id === "rockfall") rockfall();
-}
-function rockfall() {
+// the mole hops into the open cell next to the block it is hitting, whichever is nearest
+function moveNextTo(x, y) {
   const P = S.P;
-  shake(0.4); sfx("wobble", 1);
-  for (let k = 0; k < 3; k++) {
-    const x = clamp(P.x + Math.round((rnd() - 0.5) * 3), 0, COLS - 1);
-    for (let y = P.y - 3 - k * 2; y > P.y - 12 && y >= 0; y--) if (get(x, y) === E && get(x, y - 1) !== E) { setT(x, y, ROCK); break; }
+  let best = null, bd = 1e9;
+  for (const [ax, ay] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) {
+    const nx = x + ax, ny = y + ay;
+    if (nx < 0 || nx >= COLS || get(nx, ny) !== E) continue;
+    const d = Math.abs(nx - P.x) + Math.abs(ny - P.y) + (ay === 1 ? 0.5 : 0);
+    if (d < bd) { bd = d; best = [nx, ny]; }
+  }
+  if (!best) return;
+  if (best[0] !== P.x || best[1] !== P.y) {
+    P.ox = P.fx; P.oy = P.fy; P.x = best[0]; P.y = best[1]; P.mv = 0;
+    if (bd > 2) burst(P.ox + 0.5, P.oy + 0.9, 4, BIOMES[S.spec.biome].dust, 1.5);
+  }
+  P.sdx = x - P.x; P.sdy = y - P.y; P.swing = 1;
+  if (P.sdx) P.face = P.sdx;
+}
+
+// ================= breaking things =================
+function breakCell(x, y, cause) {
+  const k = K(x, y), t = S.t[k];
+  if (t === E || t === BED || t === CHAMBER) return;
+  const B = BIOMES[S.spec.biome], cx = x + 0.5, cy = y + 0.5;
+  if (S.g[k]) collectGem(x, y, S.g[k] - 1);
+  S.g[k] = 0;
+  setT(x, y, E);
+  if (y + 1 > S.deepest) S.deepest = y + 1;
+  if (t === STONE || t === HARD) { sfx("break", 0.8, t === HARD ? 0.8 : 1); burst(cx, cy, 12, B.chip, 3.4); }
+  else if (t === GAS) { /* the explosion is the show */ }
+  else burst(cx, cy, 9, B.dust, 2.6);
+  if (FOOD[t]) eat(x, y, FOOD[t]);
+  if (t === TNT) light(x, y, "tnt", cause === "dig" ? 0.55 : 0.12);
+  if (t === DYN) light(x, y, "dyn", cause === "dig" ? 0.55 : 0.12);
+  if (t === GAS) light(x, y, "gas", cause === "dig" ? 0.05 : 0.09);
+  if (t === CRYSTAL) zap(x, y);
+  // broke through into the treasure chamber
+  if (y === S.D - 1 && !S.won) win(x);
+}
+function collectGem(x, y, tier) {
+  const v = Math.max(1, Math.round(GEM_VALUE[tier] * S.luck));
+  S.runGems += v; S.gemCount++;
+  if (!S.demo) { save.gems += v; }
+  sfx("gem", 0.6, 1 + tier * 0.08);
+  sparkle(x + 0.5, y + 0.5, GEM_KINDS[tier]);
+  S.floats.push({ x: x + 0.5, y: y + 0.5, gem: GEM_KINDS[tier], t: 0, max: 0.6 });
+  if (v > 1) S.icons.push({ x: x + 0.5, y: y + 0.1, txt: "+" + v, c: GEMC[GEM_KINDS[tier]], t: 0, max: 0.9, sc: 0.8 });
+}
+function eat(x, y, n) {
+  S.swings = Math.min(S.maxSw + 40, S.swings + n); S.eaten += n;
+  sfx("heart", 0.8, n > 10 ? 0.85 : 1.05);
+  S.icons.push({ x: x + 0.5, y: y + 0.2, txt: "+" + n, c: "#7fe08a", icon: "i_swings", t: 0, max: 1.1, sc: 1.1 });
+}
+function light(x, y, kind, fuse) {
+  S.fuses.push({ x, y, kind, t: fuse, max: fuse });
+  if (kind !== "gas") sfx("fuse", 0.7);
+}
+function placeBomb(x, y) {
+  if (S.bombs <= 0) { S.armed = false; return; }
+  S.bombs--; S.armed = false; updateBombBtn();
+  S.fuses.push({ x, y, kind: "bomb", t: 0.5, max: 0.5, placed: true });
+  sfx("fuse", 0.8);
+}
+function updateFuses(dt) {
+  for (let i = S.fuses.length - 1; i >= 0; i--) {
+    const f = S.fuses[i];
+    f.t -= dt;
+    if (f.kind !== "gas" && Math.random() < 0.5) S.parts.push({ x: f.x + 0.5 + (Math.random() - 0.5) * 0.3, y: f.y + 0.1, vx: (Math.random() - 0.5) * 2, vy: -2 - Math.random() * 2, life: 0.3, max: 0.3, c: "#ffd25a", s: 0.06, g: 6, glow: true });
+    if (f.t > 0) continue;
+    S.fuses.splice(i, 1);
+    if (f.kind === "dyn") column(f.x, f.y);
+    else blast(f.x, f.y, 1, f.kind === "gas");
   }
 }
-function explode(cx, cy, R) {
-  sfx("bomb", 0.9); shake(0.55); S.hitstop = 0.05;
-  S.flashes.push({ x: cx + 0.5, y: cy + 0.5, r: R + 2.5, t: 0.4, max: 0.4 });
+// a 3x3 blast; gas burns green and sets off the gas next to it
+function blast(cx, cy, R, gas) {
+  sfx("bomb", gas ? 0.7 : 0.95, gas ? 1.25 : 1); shake(gas ? 0.3 : 0.5);
+  S.flashes.push({ x: cx + 0.5, y: cy + 0.5, r: R + 1.6, t: 0.3, max: 0.3, c: gas ? "#9cf07a" : "#ffcf4a" });
   for (let y = cy - R; y <= cy + R; y++) for (let x = cx - R; x <= cx + R; x++) {
     if (x < 0 || x >= COLS || y < 0 || y >= S.D) continue;
-    if (x === S.P.x && y === S.P.y) continue;
-    const t = get(x, y);
-    if (t === BLK) { if (S.rows[y].g[x]) collectGem(x, y, S.rows[y].g[x] - 1); setT(x, y, E); burst(x + 0.5, y + 0.5, 6, COLOR_HEX[COLORS[S.rows[y].c[x]]], 3); }
-    else if (t !== E) breakTile(x, y, "blast");
-    fire(x + 0.5, y + 0.5, 3);
+    fire(x + 0.5, y + 0.5, 3, gas);
+    if (get(x, y) !== E) breakCell(x, y, "blast");
   }
-  for (let i = 0; i < 16; i++) S.parts.push({ x: cx + 0.5, y: cy + 0.5, vx: (rnd() - 0.5) * 9, vy: (rnd() - 0.5) * 9, life: 0.9 + rnd() * 0.6, max: 1.5, c: "#3a332c", s: 0.35 + rnd() * 0.3, g: -1, smoke: true });
+  for (let i = 0; i < 10; i++) S.parts.push({ x: cx + 0.5, y: cy + 0.5, vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8, life: 0.8 + Math.random() * 0.5, max: 1.3, c: gas ? "#2f4a2a" : "#3a332c", s: 0.35 + Math.random() * 0.3, g: -1, smoke: true });
+}
+// dynamite drills a column straight down
+function column(x, y) {
+  sfx("bomb", 1, 0.85); shake(0.6);
+  for (let k = -1; k <= 8; k++) {
+    const yy = y + k; if (yy < 0 || yy >= S.D) continue;
+    S.flashes.push({ x: x + 0.5, y: yy + 0.5, r: 1.1, t: 0.25 + k * 0.02, max: 0.35, c: "#ffcf4a" });
+    fire(x + 0.5, yy + 0.5, 3);
+    if (get(x, yy) !== E) breakCell(x, yy, "blast");
+  }
+}
+// a crystal throws lightning at the nearest gems
+function zap(x, y) {
+  sfx("powerup", 0.8, 1.2); shake(0.25);
+  const targets = [];
+  for (let yy = Math.max(0, y - 7); yy < Math.min(S.D, y + 8); yy++) for (let xx = 0; xx < COLS; xx++) {
+    const k = K(xx, yy);
+    if (S.g[k] && S.t[k] !== E) targets.push({ x: xx, y: yy, d: Math.hypot(xx - x, yy - y) });
+  }
+  targets.sort((a, b) => a.d - b.d);
+  for (const tg of targets.slice(0, 6)) {
+    S.bolts.push({ x0: x + 0.5, y0: y + 0.5, x1: tg.x + 0.5, y1: tg.y + 0.5, t: 0.35, seed: Math.random() * 1000 });
+    breakCell(tg.x, tg.y, "zap");
+  }
 }
 
-// ================= hazards: boulders and lava =================
-function updateHazards(dt) {
-  const P = S.P;
-  const top = Math.max(0, Math.floor(S.cam) - 6), bot = Math.min(S.D, Math.floor(S.cam + VIEW_ROWS) + 8);
-  for (let y = top; y < bot; y++) {
-    const r = S.rows[y], rb = S.rows[y + 1];
-    for (let x = 0; x < COLS; x++) {
-      if (r.t[x] !== LAVA || rb.t[x] !== E || y + 1 >= S.D) continue;
-      const k = y * COLS + x;
-      const tt = (S.lavaT.get(k) || 0) + dt;
-      if (tt > 0.5) {
-        S.lavaT.delete(k);
-        r.t[x] = E; S.dirty = true;
-        if (P.x === x && P.y === y + 1) { hurt("lava"); burst(x + 0.5, y + 1.2, 8, "#ffb040", 3); }
-        else { rb.t[x] = LAVA; S.lavaT.set((y + 1) * COLS + x, -0.02); }
-      } else S.lavaT.set(k, tt);
-    }
-  }
+// ================= ending a run =================
+function checkOut() {
+  if (S.swings > 0 || S.won || S.over) return;
+  S.over = true; S.endT = 0;
+}
+function win(x) {
+  S.won = true; S.endT = 0;
+  for (let xx = 0; xx < COLS; xx++) S.t[K(xx, S.D)] = E;
+  const P = S.P; P.ox = P.fx; P.oy = P.fy; P.x = x; P.y = S.D; P.mv = 0; P.cheer = 1;
+  const bonus = Math.round((10 + S.mine * 3) * S.luck);
+  S.chestGems = bonus; S.runGems += bonus; if (!S.demo) save.gems += bonus;
+  sfx("win", 0.9); sfx("crate", 0.7);
+  for (let i = 0; i < 70; i++) { const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, sp = 4 + Math.random() * 8; S.parts.push({ x: 4.5, y: S.D + 0.4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1 + Math.random() * 0.8, max: 1.8, c: Object.values(GEMC)[i % 5], s: 0.1 + Math.random() * 0.1, g: 14, glow: i % 3 === 0 }); }
+  S.icons.push({ x: 4.5, y: S.D - 0.6, txt: "+" + bonus, c: "#ffd25a", icon: "i_gem", t: 0, max: 1.6, sc: 1.6 });
+  shake(0.3);
 }
 
 // ================= particles =================
-function shake(a) { if (!reduceMotion) S.shake = Math.max(S.shake, a); }
-function flashScreen(c, a) { S.flash = a; S.flashC = c; }
-function burst(x, y, n, c, sp) { for (let i = 0; i < n; i++) S.parts.push({ x, y, vx: (rnd() - 0.5) * sp * 2, vy: -rnd() * sp * 1.4 - 0.5, life: 0.35 + rnd() * 0.45, max: 0.8, c, s: 0.06 + rnd() * 0.09, g: 22 }); }
-function fire(x, y, n) { for (let i = 0; i < n; i++) S.parts.push({ x: x + (rnd() - 0.5) * 0.6, y: y + (rnd() - 0.5) * 0.6, vx: (rnd() - 0.5) * 3, vy: -rnd() * 3, life: 0.3 + rnd() * 0.4, max: 0.7, c: rnd() < 0.5 ? "#ffcf4a" : "#ff6a1a", s: 0.18 + rnd() * 0.18, g: -3, glow: true }); }
-const GEMC = { amber: "#ffcf5a", emerald: "#5fe08a", sapphire: "#5aa8ff", ruby: "#ff5a6e", diamond: "#e8fbff" };
+function shake(a) { if (!reduceMotion && mode === "play") S.shake = Math.max(S.shake, a); }
+function burst(x, y, n, c, sp) { for (let i = 0; i < n; i++) S.parts.push({ x, y, vx: (Math.random() - 0.5) * sp * 2, vy: -Math.random() * sp * 1.4 - 0.5, life: 0.35 + Math.random() * 0.45, max: 0.8, c, s: 0.06 + Math.random() * 0.09, g: 22 }); }
+function fire(x, y, n, gas) { for (let i = 0; i < n; i++) S.parts.push({ x: x + (Math.random() - 0.5) * 0.6, y: y + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 3, vy: -Math.random() * 3, life: 0.3 + Math.random() * 0.4, max: 0.7, c: gas ? (Math.random() < 0.5 ? "#c8ff9a" : "#5fe08a") : Math.random() < 0.5 ? "#ffcf4a" : "#ff6a1a", s: 0.18 + Math.random() * 0.18, g: -3, glow: true }); }
 function sparkle(x, y, id) { for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; S.parts.push({ x, y, vx: Math.cos(a) * 4, vy: Math.sin(a) * 4, life: 0.4, max: 0.4, c: GEMC[id], s: 0.07, g: 0, glow: true, drag: 3 }); } }
 function updateParts(dt) {
   for (let i = S.parts.length - 1; i >= 0; i--) {
@@ -779,43 +481,30 @@ function updateParts(dt) {
   }
   if (S.parts.length > 700) S.parts.splice(0, S.parts.length - 700);
   for (const arr of [S.floats, S.icons]) for (let i = arr.length - 1; i >= 0; i--) { const f = arr[i]; f.t += dt; if (f.t > f.max) arr.splice(i, 1); }
-  for (let i = S.flashes.length - 1; i >= 0; i--) { const f = S.flashes[i]; f.t -= dt; if (f.t <= 0) S.flashes.splice(i, 1); }
+  for (const arr of [S.flashes, S.bolts]) for (let i = arr.length - 1; i >= 0; i--) { const f = arr[i]; f.t -= dt; if (f.t <= 0) arr.splice(i, 1); }
 }
 
 // ================= main update =================
+function clampCam(c) { return clamp(c, -3, S.D + 3 - (VIEW_ROWS - TOP / TS)); }
 function update(dt) {
-  if (S.hitstop > 0) { S.hitstop -= dt; dt *= 0.08; }
   S.time += dt;
-  for (const k in S.fx) if (S.fx[k] > 0) S.fx[k] = Math.max(0, S.fx[k] - dt);
-  if (!S.won && !S.P.dead && S.P.y >= 0) {
-    S.oil -= S.burn * dt;
-    if (S.oil <= 0) { S.oil = 0; outOfOil(); }
-  }
-  if (S.fx.magnet > 0) {
-    S.magnetT -= dt;
-    if (S.magnetT <= 0) {
-      S.magnetT = 0.12;
-      const P = S.P;
-      for (let y = P.y - 2; y <= P.y + 2; y++) for (let x = P.x - 2; x <= P.x + 2; x++) {
-        if (y < 0 || y >= S.D || x < 0 || x >= COLS) continue;
-        const r = S.rows[y];
-        if (r.t[x] === BLK && r.g[x]) { collectGem(x, y, r.g[x] - 1); r.g[x] = 0; }
-      }
-    }
-  }
-  updatePlayer(dt);
-  updatePops(dt);
-  updateGravity(dt);
-  updateHazards(dt);
-  if (S.comboT > 0) { S.comboT -= dt; if (S.comboT <= 0) S.combo = 0; }
+  const P = S.P;
+  P.mv = Math.min(1, P.mv + dt / 0.12);
+  P.fx = lerp(P.ox, P.x, easeOut(P.mv)); P.fy = lerp(P.oy, P.y, easeOut(P.mv));
+  P.swing = Math.max(0, P.swing - dt * 7);
+  P.blink -= dt; if (P.blink < -0.12) P.blink = 2 + Math.random() * 3;
+  for (const [k, v] of S.hits) { const nv = v > 0 ? v - dt : v + dt; if (Math.abs(nv) < 0.01 || Math.sign(nv) !== Math.sign(v)) S.hits.delete(k); else S.hits.set(k, nv); }
+  updateFuses(dt);
   updateParts(dt);
   S.shake = Math.max(0, S.shake - dt * 1.8);
   S.flash = Math.max(0, S.flash - dt * 1.6);
-  const P = S.P;
-  const py = P.moving ? lerp(P.fromY, P.y, P.mv) : P.y;
-  const target = Math.min(py - VIEW_ROWS * 0.38, S.D + 2.5 - VIEW_ROWS);
-  S.cam = lerp(S.cam, Math.max(-4.5, target), 1 - Math.exp(-dt * (P.falling ? 12 : 7)));
+  if (S.over && !S.fuses.length) { S.endT += dt; if (S.endT > 0.9 && mode === "play") showResult(); }
+  if (S.won) { S.endT += dt; if (S.endT > 1.8 && mode === "play") showResult(); }
+  // camera: keep the mole a little above the middle, unless the player has dragged to look around
+  if (!S.free) S.camT = clampCam(P.fy - (VIEW_ROWS - TOP / TS) * 0.42 - TOP / TS);
+  S.cam = lerp(S.cam, S.camT, 1 - Math.exp(-dt * 8));
 }
+const easeOut = (k) => 1 - (1 - k) * (1 - k);
 
 // ================= rendering =================
 function draw() {
@@ -849,52 +538,74 @@ function draw() {
   }
   if (OX > 0) {
     const top = Y(Math.max(0, y0));
-    ctx.fillStyle = "rgba(5,3,2,.55)"; ctx.fillRect(0, top, OX, H + TS * 4); ctx.fillRect(X(COLS), top, W - X(COLS), H + TS * 4);
+    ctx.fillStyle = "rgba(5,3,2,.6)"; ctx.fillRect(0, top, OX, H + TS * 4); ctx.fillRect(X(COLS), top, W - X(COLS), H + TS * 4);
   }
   // tiles
   for (let y = Math.max(0, y0); y <= y1; y++) {
-    if (y > S.D) { for (let x = 0; x < COLS; x++) spr("bedrock", X(x) + TS / 2, Y(y) + TS / 2, u * 1.002); continue; }
-    const r = S.rows[y];
     for (let x = 0; x < COLS; x++) {
-      const t = r.t[x], cy = Y(y) + TS / 2;
-      let cx = X(x) + TS / 2;
-      if (t === E || t === LAVA) {
+      const k = K(x, y), t = y > S.D + 2 ? BED : S.t[k];
+      let cx = X(x) + TS / 2, cy = Y(y) + TS / 2;
+      if (t === E || t === CHAMBER) {
         spr(`wall_${bi}`, cx, cy, u * 1.002);
-        const up = y > 0 ? S.rows[y - 1].t[x] : E;
-        if (up !== E && up !== LAVA) ctx.drawImage(SHADOW.top, X(x), Y(y), TS, TS * 0.4);
-        const l = get(x - 1, y), rr = get(x + 1, y);
-        if (l !== E && l !== LAVA) ctx.drawImage(SHADOW.left, X(x), Y(y), TS * 0.3, TS);
-        if (rr !== E && rr !== LAVA) ctx.drawImage(SHADOW.right, X(x) + TS * 0.7, Y(y), TS * 0.3, TS);
-        if (t === LAVA) { spr("lava", cx, cy, u * 1.002); ctx.fillStyle = `rgba(255,240,160,${0.15 + 0.15 * Math.sin(S.time * 4 + x * 1.7 + y)})`; ctx.fillRect(X(x), Y(y), TS, TS); }
+        if (t === CHAMBER) { ctx.fillStyle = "rgba(10,7,5,.55)"; ctx.fillRect(X(x), Y(y), TS, TS); }
+        const up = get(x, y - 1);
+        if (y > 0 && up !== E) ctx.drawImage(SHADOW.top, X(x), Y(y), TS, TS * 0.4);
+        if (get(x - 1, y) !== E) ctx.drawImage(SHADOW.left, X(x), Y(y), TS * 0.3, TS);
+        if (get(x + 1, y) !== E) ctx.drawImage(SHADOW.right, X(x) + TS * 0.7, Y(y), TS * 0.3, TS);
         continue;
       }
-      const wob = S.wobKey.has(y * COLS + x);
-      if (wob) { spr(`wall_${bi}`, cx, cy, u * 1.002); cx += Math.sin(S.time * 46 + x * 2) * TS * 0.06; }
-      const pop = t === BLK && S.pops.find((p) => p.x === x && p.y === y);
-      drawTile(t, r.c[x], r.g[x], r.v[x], cx, cy, u, bi, pop, r.k[x]);
-      if (y === 0 && !wob) { ctx.fillStyle = "#4fae55"; ctx.fillRect(X(x), Y(0) - TS * 0.06, TS, TS * 0.12); }
-      const hp = r.hp[x];
-      if (hp > 0.02) drawCracks(cx - TS / 2, Y(y), hp, x * 7 + y * 13);
+      const hit = S.hits.get(k);
+      let sc = 1;
+      if (hit > 0) sc = 1 - hit * 0.5;
+      if (hit < 0) cx += Math.sin(S.time * 80) * TS * 0.05;
+      drawTile(t, S.v[k], cx, cy, u * sc, bi);
+      if (S.g[k]) spr("gem_" + GEM_KINDS[S.g[k] - 1], cx, cy, u * 0.62 * sc);
+      if (S.max[k] > 0 && S.hp[k] < S.max[k]) drawCracks(X(x), Y(y), 1 - S.hp[k] / S.max[k], k);
+      // what you can't reach yet sits in shadow
+      if (!exposed(x, y)) { ctx.fillStyle = "rgba(8,5,4,.38)"; ctx.fillRect(X(x), Y(y), TS, TS); }
+      if (hit < 0) { ctx.fillStyle = `rgba(226,71,75,${-hit * 2})`; ctx.fillRect(X(x), Y(y), TS, TS); }
+      if (y === 0) { ctx.fillStyle = "#4fae55"; ctx.fillRect(X(x), Y(0) - TS * 0.06, TS, TS * 0.12); }
     }
   }
   // the treasure chamber
   if (S.D <= y1 + 1) {
     const gy = Y(S.D);
-    ctx.fillStyle = "rgba(255,210,90,.12)"; ctx.fillRect(X(0), gy, COLS * TS, TS);
-    for (let x = 0; x < COLS; x++) { ctx.fillStyle = "#ffd25a"; ctx.fillRect(X(x), gy + TS - 3, TS, 3); }
+    ctx.fillStyle = S.won ? "rgba(255,210,90,.2)" : "rgba(255,210,90,.08)"; ctx.fillRect(X(0), gy, COLS * TS, TS);
+    ctx.fillStyle = "#ffd25a"; ctx.fillRect(X(0), gy + TS - 3, COLS * TS, 3);
     spr(S.won ? "chest_open" : "chest", X(4.5), gy + TS * 0.5 + (S.won ? -TS * 0.05 : Math.sin(S.time * 3) * TS * 0.04), u * 1.15);
   }
-  // loose blocks on their way down
-  for (const bd of S.bodies) for (const q of bd.cells) drawTile(q.t, q.c, q.g, 0, X(q.x) + TS / 2, Y(q.y + bd.d) + TS / 2, u, bi, null, q.k);
-  // danger lane: something loose is above the mole with nothing in between
-  const th = threatAbove();
-  if (th != null && !P.dead && !S.won) {
-    const m = moleXY(), a = 0.16 + 0.1 * Math.sin(S.time * 14);
-    const g = ctx.createLinearGradient(0, Y(th), 0, Y(m.y));
-    g.addColorStop(0, "rgba(226,71,75,0)"); g.addColorStop(1, `rgba(226,71,75,${a})`);
-    ctx.fillStyle = g; ctx.fillRect(X(P.x), Y(th + 1), TS, Y(m.y) - Y(th + 1));
+  // hover and armed-bomb hints
+  if (S.hover && exposed(S.hover.x, S.hover.y) && !S.won && !S.over) {
+    ctx.strokeStyle = S.armed ? "rgba(255,120,80,.95)" : "rgba(255,244,220,.75)"; ctx.lineWidth = 2.5;
+    if (S.armed) { ctx.setLineDash([5, 4]); ctx.strokeRect(X(S.hover.x - 1) + 2, Y(S.hover.y - 1) + 2, TS * 3 - 4, TS * 3 - 4); ctx.setLineDash([]); }
+    else ctx.strokeRect(X(S.hover.x) + 2, Y(S.hover.y) + 2, TS - 4, TS - 4);
+  }
+  // fuses burning
+  for (const f of S.fuses) {
+    const k = 1 - f.t / f.max;
+    if (f.placed) spr("i_bomb", X(f.x) + TS / 2, Y(f.y) + TS / 2, u * 1.1 * (1 + Math.sin(S.time * 30) * 0.06));
+    ctx.fillStyle = `rgba(255,${f.kind === "gas" ? 255 : 200},${f.kind === "gas" ? 120 : 80},${0.25 + 0.35 * k * (0.5 + 0.5 * Math.sin(S.time * 40))})`;
+    ctx.fillRect(X(f.x), Y(f.y), TS, TS);
   }
   drawMole(X, Y, u);
+  // lightning
+  for (const b of S.bolts) {
+    ctx.globalAlpha = clamp(b.t / 0.35, 0, 1);
+    ctx.strokeStyle = "#ffe86a"; ctx.lineWidth = Math.max(2, TS * 0.07); ctx.lineJoin = "round";
+    ctx.shadowColor = "#58b6ff"; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.moveTo(X(b.x0), Y(b.y0));
+    for (let i = 1; i < 6; i++) { const k = i / 6, j = (hash2(i, Math.floor(S.time * 30), b.seed) - 0.5) * 0.7; ctx.lineTo(X(lerp(b.x0, b.x1, k) + j), Y(lerp(b.y0, b.y1, k) + j)); }
+    ctx.lineTo(X(b.x1), Y(b.y1)); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+  for (const f of S.flashes) {
+    const k = f.t / f.max;
+    const g = ctx.createRadialGradient(X(f.x), Y(f.y), 0, X(f.x), Y(f.y), TS * f.r);
+    g.addColorStop(0, f.c); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalAlpha = k; ctx.fillStyle = g; ctx.fillRect(X(f.x) - TS * f.r, Y(f.y) - TS * f.r, TS * f.r * 2, TS * f.r * 2);
+  }
+  ctx.globalAlpha = 1;
   for (const p of S.parts) {
     const a = clamp(p.life / p.max, 0, 1);
     ctx.globalAlpha = p.smoke ? a * 0.5 : a;
@@ -904,214 +615,149 @@ function draw() {
     else ctx.fillRect(X(p.x) - s / 2, Y(p.y) - s / 2, s, s);
   }
   ctx.globalAlpha = 1;
-  drawDark(X, Y, u);
-  for (const p of S.parts) if (p.glow) { ctx.globalAlpha = clamp(p.life / p.max, 0, 1) * 0.8; ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), p.s * TS * 0.8, 0, 7); ctx.fill(); }
-  ctx.globalAlpha = 1;
-  // gems flying out of popped blocks
   for (const f of S.floats) { const k = f.t / f.max; ctx.globalAlpha = 1 - k; spr("gem_" + f.gem, X(f.x), Y(f.y - k * 1.2), u * (0.6 + k * 0.3)); }
   ctx.globalAlpha = 1;
-  // big chain numbers and crate icons
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   for (const f of S.icons) {
     const k = f.t / f.max;
     const pop = k < 0.15 ? 0.5 + (k / 0.15) * 0.6 : k < 0.25 ? 1.1 - (k - 0.15) : 1;
     ctx.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
     const yy = Y(f.y) - k * TS * 0.8;
-    if (f.icon) {
-      if (f.ring) { ctx.fillStyle = "rgba(18,13,11,.8)"; ctx.strokeStyle = f.ring; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X(f.x), yy, TS * 0.5 * f.sc * pop, 0, 7); ctx.fill(); ctx.stroke(); }
-      spr(f.icon, X(f.x) + (f.txt ? TS * 0.2 : 0), yy, u * f.sc * pop * (f.ring ? 1 : 0.8));
-    }
+    if (f.icon) spr(f.icon, X(f.x) + (f.txt ? TS * 0.28 : 0), yy, u * f.sc * pop * 0.8);
     if (f.txt) {
       const fs = Math.round(TS * 0.55 * f.sc * pop);
       ctx.font = `${fs}px "Lilita One", "Arial Black", sans-serif`;
       ctx.lineWidth = Math.max(3, fs * 0.2); ctx.strokeStyle = "rgba(0,0,0,.9)"; ctx.lineJoin = "round";
-      const tx = X(f.x) - (f.icon ? TS * 0.35 : 0);
+      const tx = X(f.x) - (f.icon ? TS * 0.22 : 0);
       ctx.strokeText(f.txt, tx, yy); ctx.fillStyle = f.c; ctx.fillText(f.txt, tx, yy);
     }
   }
   ctx.globalAlpha = 1;
-  // stuck on bedrock: show which way to steer
-  if (P.stuck > 0.5 && !P.dead && !S.won) {
-    const m = moleXY(), b = Math.sin(S.time * 8) * TS * 0.08;
-    ctx.globalAlpha = Math.min(1, (P.stuck - 0.5) * 3);
-    if (get(P.x - 1, P.y) !== BED || get(P.x - 1, P.y + 1) !== BED) spr("arrow", X(m.x - 0.45) - b, Y(m.y + 0.5), u * 0.9);
-    if (get(P.x + 1, P.y) !== BED || get(P.x + 1, P.y + 1) !== BED) spr("arrow", X(m.x + 1.45) + b, Y(m.y + 0.5), u * 0.9, { flip: true });
-    ctx.globalAlpha = 1;
-  }
   ctx.restore();
-  // low oil: the edges go dark red
-  const low = clamp(1 - S.oil / 25, 0, 1);
-  if (low > 0 && !S.won && mode === "play") {
-    const a = low * (0.35 + 0.2 * Math.sin(S.time * 8));
-    const g = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.25, W / 2, H * 0.45, Math.max(W, H) * 0.75);
+  // depth gets gloomier, but never hides what you can tap
+  const dark = clamp(P.fy / 60, 0, 1) * 0.35;
+  if (dark > 0.01) {
+    const g = ctx.createRadialGradient(W / 2, H * 0.5, Math.min(W, H) * 0.3, W / 2, H * 0.5, Math.max(W, H) * 0.75);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, `rgba(4,2,6,${dark})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if (S.swings <= 10 && !S.won && mode === "play") {
+    const a = (1 - S.swings / 10) * (0.25 + 0.15 * Math.sin(S.time * 8));
+    const g = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.3, W / 2, H * 0.45, Math.max(W, H) * 0.75);
     g.addColorStop(0, "rgba(120,0,10,0)"); g.addColorStop(1, `rgba(150,10,20,${a})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-  if (S.flash > 0) { ctx.globalAlpha = S.flash; ctx.fillStyle = S.flashC; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+}
+function drawTile(t, v, cx, cy, u, bi) {
+  if (t === STONE) { spr(`dirt_${bi}_${v}`, cx, cy, u * 1.002); spr(`rock_${bi}`, cx, cy, u * 1.002); return; }
+  if (t === HARD) { spr(`hard_${bi}`, cx, cy, u * 1.002); return; }
+  if (t === BED) { spr("bedrock", cx, cy, u * 1.002); return; }
+  if (t === GAS) { spr("gas", cx, cy, u * 1.002); return; }
+  if (t === CRYSTAL) { spr("crystal", cx, cy, u * 1.002); return; }
+  if (t === TNT) { spr("tnt", cx, cy, u * 1.002); return; }
+  if (t === DYN) { spr("dynamite", cx, cy, u * 1.002); return; }
+  spr(`dirt_${bi}_${v}`, cx, cy, u * 1.002);
+  if (t === APPLE) spr("apple", cx, cy, u * 0.95);
+  else if (t === LUNCH) spr("lunch", cx, cy, u * 0.95);
 }
 function drawCracks(x, y, hp, seed) {
-  ctx.strokeStyle = "rgba(10,6,4,.7)"; ctx.lineWidth = Math.max(1.2, TS * 0.045); ctx.lineCap = "round";
-  const n = 1 + Math.floor(hp * 4);
+  ctx.strokeStyle = "rgba(10,6,4,.75)"; ctx.lineWidth = Math.max(1.4, TS * 0.05); ctx.lineCap = "round";
+  const n = 1 + Math.floor(hp * 5);
   ctx.beginPath();
   for (let i = 0; i < n; i++) {
-    const a = hash2(seed, i, 1) * Math.PI * 2, len = TS * (0.18 + 0.3 * hp);
+    const a = hash2(seed, i, 1) * Math.PI * 2, len = TS * (0.2 + 0.3 * hp);
     const mx = x + TS / 2 + Math.cos(a + 0.5) * len * 0.5, my = y + TS / 2 + Math.sin(a + 0.5) * len * 0.5;
     ctx.moveTo(x + TS / 2, y + TS / 2); ctx.lineTo(mx, my); ctx.lineTo(x + TS / 2 + Math.cos(a) * len, y + TS / 2 + Math.sin(a) * len);
   }
   ctx.stroke();
 }
-function drawTile(t, c, g, v, cx, cy, u, bi, pop, k = 1) {
-  if (t === BLK) {
-    let sc = 1;
-    if (pop) sc = 1 + 0.12 * Math.max(0, 1 - pop.t * 8) + (pop.t < 0.05 ? 0.1 : 0);
-    spr("blk_" + COLORS[c], cx, cy, u * sc);
-    if (k !== 1 && TOUGH_OVER[k]) ctx.drawImage(TOUGH_OVER[k], cx - TS * sc / 2, cy - TS * sc / 2, TS * sc, TS * sc);
-    if (pop && pop.t < 0.12) { ctx.fillStyle = `rgba(255,255,255,${0.5 - pop.t * 4})`; ctx.fillRect(cx - TS / 2 + 2, cy - TS / 2 + 2, TS - 4, TS - 4); }
-    if (g) spr("gem_" + GEM_KINDS[g - 1], cx, cy + Math.sin(S.time * 3 + cx * 0.1) * TS * 0.02, u * 0.6);
-    return;
-  }
-  if (t === OIL || t === CRATE) {
-    spr(`dirt_${bi}_${v}`, cx, cy, u * 1.002);
-    if (t === OIL) { ctx.fillStyle = `rgba(255,210,90,${0.18 + 0.1 * Math.sin(S.time * 5)})`; ctx.fillRect(cx - TS / 2, cy - TS / 2, TS, TS); }
-    spr(t === OIL ? "oil" : "crate", cx, cy + (t === OIL ? Math.sin(S.time * 4) * TS * 0.03 : 0), u * (t === OIL ? 0.95 : 0.92));
-    return;
-  }
-  spr(`dirt_${bi}_${v}`, cx, cy, u * 1.002);
-  if (t === ROCK) spr(`rock_${bi}`, cx, cy, u * 1.002);
-  else if (t === BED) spr("bedrock", cx, cy, u * 1.002);
-}
-// the nearest loose thing (shaking or falling) straight above the mole with only air between
-function threatAbove() {
-  const P = S.P, pc = moleCell();
-  let best = null;
-  for (const b of S.bodies) for (const q of b.cells) if (q.x === pc.x && q.y + b.d < pc.y) { const y = Math.floor(q.y + b.d); if (best == null || y > best) best = y; }
-  for (const w of S.wobbles) for (const [x, y] of w.cells) if (x === pc.x && y < pc.y && (best == null || y > best)) best = y;
-  if (best == null) return null;
-  for (let y = Math.max(0, best + 1); y < pc.y; y++) if (get(P.x, y) !== E) return null;
-  return best;
-}
-function moleXY() {
-  const P = S.P;
-  let k = P.moving ? P.mv : 1;
-  if (P.moving && !P.falling) k = 1 - (1 - k) * (1 - k);
-  return { x: lerp(P.fromX, P.x, k), y: lerp(P.fromY, P.y, k) };
-}
 function drawMole(X, Y, u) {
   const P = S.P;
-  const m = moleXY();
-  const cx = X(m.x) + TS / 2, cy = Y(m.y) + TS / 2;
-  if (P.inv > 0 && Math.sin(S.time * 40) > 0.3 && !P.dead) ctx.globalAlpha = 0.45;
-  let sx = 1, sy = 1, ox = 0, oy = 0;
-  if (P.squash > 0) { sx = 1 + P.squash * 0.3; sy = 1 - P.squash * 0.25; oy = TS * P.squash * 0.1; }
-  if (P.falling) { sx = 0.9; sy = 1.1; }
-  if (S.won) { const k = Math.min(1, S.wonT * 3); oy -= Math.abs(Math.sin(S.time * 10)) * TS * 0.25 * k; }
-  if (P.moving && !P.falling) oy -= Math.sin(P.mv * Math.PI) * TS * 0.08;
-  const dig = P.dig && !P.dead;
-  const swing = dig ? Math.sin(P.digAnim * (S.fx.drill > 0 ? 40 : 22)) : 0;
-  if (dig) { ox += P.dig.dx * swing * TS * 0.04; oy += P.dig.dy * Math.abs(swing) * TS * 0.05; }
-  const name = P.dead || P.hurtT > 0 ? "mole_hurt" : P.blink < 0 ? "mole_blink" : "mole";
+  const cx = X(P.fx) + TS / 2, cy = Y(P.fy) + TS / 2;
+  let oy = 0;
+  if (P.mv < 1) oy -= Math.sin(P.mv * Math.PI) * TS * 0.25;
+  if (S.won) oy -= Math.abs(Math.sin(S.time * 10)) * TS * 0.25 * Math.min(1, S.endT * 3);
+  const name = S.over ? "mole_hurt" : P.blink < 0 ? "mole_blink" : "mole";
   const face = P.face < 0;
-  ctx.save(); ctx.translate(cx + ox, cy + oy + TS * 0.04); ctx.scale(sx, sy);
+  ctx.save(); ctx.translate(cx, cy + oy + TS * 0.04);
   spr(name, 0, 0, u * 0.9, face ? { flip: true } : undefined);
   ctx.restore();
-  if (!P.dead) {
-    if (S.fx.drill > 0) {
-      const dd = P.dig || { dx: 0, dy: 1 };
-      const jx = (Math.random() - 0.5) * (dig ? TS * 0.04 : 0);
-      spr("drillbit", cx + dd.dx * TS * 0.42 + jx, cy + dd.dy * TS * 0.38 + TS * 0.08, u * 0.82, { rot: Math.atan2(dd.dy, dd.dx) });
-    } else {
-      let a;
-      if (dig && P.dig.dy) a = (face ? 1 : -1) * (0.9 + swing * 0.7) + (face ? -0.3 : 0.3);
-      else if (dig) a = (face ? -1 : 1) * (0.4 + swing * 0.9);
-      else a = (face ? -1 : 1) * -0.5;
-      if (S.won) a = (face ? 1 : -1) * 1.2;
-      ctx.save(); ctx.translate(cx + (face ? -1 : 1) * TS * 0.22, cy + TS * 0.08 + oy); ctx.rotate(a); spr("pick", TS * (face ? -0.12 : 0.12), -TS * 0.2, u * 0.78, face ? { flip: true } : undefined); ctx.restore();
-    }
-  }
-  if (S.fx.dizzy > 0 && !P.dead) for (let i = 0; i < 3; i++) { const a = S.time * 5 + (i * Math.PI * 2) / 3; spr("i_star", cx + Math.cos(a) * TS * 0.35, cy - TS * 0.48 + Math.sin(a) * TS * 0.1, u * 0.35); }
-  ctx.globalAlpha = 1;
-}
-function lightRadius() {
-  let L = 2 + 4.8 * clamp(S.oil / 100, 0, 1);
-  if (S.fx.dark > 0) L *= 0.5;
-  if (S.won) L = 9;
-  return Math.max(1.2, L);
-}
-function drawDark(X, Y) {
-  const m = moleXY();
-  const a = clamp((m.y - 2) / 14, 0, 1) * 0.82;
-  if (a <= 0.01) return;
-  const k = dk.width / W;
-  dctx.setTransform(1, 0, 0, 1, 0, 0);
-  dctx.globalCompositeOperation = "source-over";
-  dctx.clearRect(0, 0, dk.width, dk.height);
-  dctx.fillStyle = `rgba(6,4,8,${a})`; dctx.fillRect(0, 0, dk.width, dk.height);
-  dctx.globalCompositeOperation = "destination-out";
-  dctx.setTransform(k, 0, 0, k, 0, 0);
-  const hole = (x, y, r, s = 1) => {
-    const g = dctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(0,0,0,${s})`); g.addColorStop(0.55, `rgba(0,0,0,${s * 0.75})`); g.addColorStop(1, "rgba(0,0,0,0)");
-    dctx.fillStyle = g; dctx.beginPath(); dctx.arc(x, y, r, 0, 7); dctx.fill();
-  };
-  const flick = 1 + Math.sin(S.time * 13) * 0.015 + Math.sin(S.time * 7.3) * 0.02 + (S.oil < 20 ? Math.sin(S.time * 31) * 0.05 : 0);
-  hole(X(m.x + 0.5), Y(m.y + 0.45), lightRadius() * TS * flick, 1);
-  const y0 = Math.floor(S.cam) - 1, y1 = Math.min(S.D, Math.ceil(S.cam + VIEW_ROWS) + 1);
-  let n = 0;
-  for (let y = Math.max(0, y0); y < y1 && n < 40; y++) {
-    const r = S.rows[y];
-    for (let x = 0; x < COLS; x++) {
-      if (r.t[x] === LAVA) { hole(X(x + 0.5), Y(y + 0.5), TS * 1.7, 0.85); n++; }
-      else if (r.t[x] === OIL) { hole(X(x + 0.5), Y(y + 0.5), TS * 1.3, 0.8); n++; }
-    }
-  }
-  for (const w of S.wobbles) for (const [x, y] of w.cells) hole(X(x + 0.5), Y(y + 0.5), TS * 0.9, 0.6);
-  for (const b of S.bodies) for (const q of b.cells) hole(X(q.x + 0.5), Y(q.y + b.d + 0.5), TS * 0.9, 0.7);
-  if (S.D < y1 + 2) hole(X(4.5), Y(S.D + 0.5), TS * 2.4, 0.9);
-  for (const f of S.flashes) hole(X(f.x), Y(f.y), TS * f.r * (f.t / f.max + 0.3), 1);
-  dctx.globalCompositeOperation = "source-over";
-  ctx.drawImage(dk, 0, 0, W, H);
+  // the pick swings toward the block being hit
+  const sw = P.swing;
+  let a;
+  if (S.won) a = (face ? 1 : -1) * 1.2;
+  else if (P.sdy > 0 && !P.sdx) a = (face ? 1 : -1) * (0.3 + sw * 1.1) + (face ? -0.3 : 0.3);
+  else if (P.sdy < 0 && !P.sdx) a = (face ? 1 : -1) * (-1.4 + sw * 0.6);
+  else a = (face ? -1 : 1) * (-0.6 + sw * 1.3);
+  ctx.save(); ctx.translate(cx + (face ? -1 : 1) * TS * 0.22, cy + TS * 0.08 + oy); ctx.rotate(a); spr("pick", TS * (face ? -0.12 : 0.12), -TS * 0.2, u * 0.78, face ? { flip: true } : undefined); ctx.restore();
 }
 
 // ================= HUD =================
-const hud = { depth: -1, prog: -1, gems: -1, oil: "", fx: "", mine: -1, hearts: -1 };
+const hud = { sw: -1, gems: -1, prog: -1, mine: -1 };
 function updateHUD() {
-  const d = Math.max(0, S.maxDepth);
   if (hud.mine !== S.mine) { hud.mine = S.mine; $("hMine").textContent = S.mine; $("hMine").style.fontSize = S.mine > 99 ? "11px" : S.mine > 9 ? "13px" : ""; }
-  if (hud.depth !== d) { hud.depth = d; $("hDepth").innerHTML = Math.max(0, S.D - d) + "<small>m</small>"; $("hProg").style.width = clamp(d / S.D, 0, 1) * 100 + "%"; }
-  if (hud.hearts !== S.hearts) {
-    hud.hearts = S.hearts;
-    $("hHearts").innerHTML = [0, 1, 2].map((i) => `<img alt="" src="${iconURL(i < S.hearts ? "i_heart" : "i_heart_empty")}">`).join("");
-    $("hHearts").parentElement.setAttribute("aria-label", S.hearts + " hearts");
-  }
-  if (hud.gems !== S.gems) { hud.gems = S.gems; $("hGems").textContent = S.gems; }
-  const o = Math.round(S.oil);
-  if (hud.oil !== o) {
-    hud.oil = o;
-    const f = $("hFill"); f.style.transform = `scaleX(${Math.max(0.02, o / 100)})`;
-    f.style.background = o > 50 ? "#ffd25a" : o > 25 ? "#ff9a3c" : "#e2474b";
-    $("hMeter").classList.toggle("close", o <= 25);
-  }
-  const act = Object.entries(S.fx).filter(([, v]) => v > 0);
-  const fk = act.map(([k]) => k).join(",");
-  if (hud.fx !== fk) {
-    hud.fx = fk;
-    $("fx").innerHTML = act.map(([k]) => `<div class="fx ${isBadFx(k) ? "bad" : "good"}"><img alt="" src="${iconURL(FX_META[k].icon)}"></div>`).join("");
+  const d = S.deepest;
+  if (hud.prog !== d) { hud.prog = d; $("hDepth").innerHTML = Math.max(0, S.D - d) + "<small>m</small>"; $("hProg").style.width = clamp(d / S.D, 0, 1) * 100 + "%"; }
+  if (hud.gems !== S.runGems) { hud.gems = S.runGems; $("hGems").textContent = S.runGems; }
+  if (hud.sw !== S.swings) {
+    hud.sw = S.swings;
+    $("hSwings").textContent = S.swings;
+    $("hSw").classList.toggle("low", S.swings <= 10);
+    $("hSwFill").style.transform = `scaleX(${clamp(S.swings / S.maxSw, 0.02, 1)})`;
   }
 }
-function banner(k, n, h, danger) {
+function updateBombBtn() {
+  const b = $("btnBomb");
+  b.hidden = S.bombs <= 0 && !S.armed;
+  $("hBombs").textContent = S.bombs;
+  b.classList.toggle("armed", S.armed);
+  b.setAttribute("aria-pressed", S.armed ? "true" : "false");
+}
+function toggleBomb() {
+  if (mode !== "play" || S.won || S.over) return;
+  if (!S.armed && S.bombs <= 0) return;
+  S.armed = !S.armed; updateBombBtn(); uiSfx("click", 0.6, S.armed ? 1.2 : 0.9);
+}
+function banner(k, n, h) {
   if (mode === "title") return;
   const b = $("banner");
   $("bnK").textContent = k || ""; $("bnN").textContent = n || ""; $("bnH").textContent = h || "";
-  b.classList.toggle("danger", !!danger);
   b.classList.remove("show"); void b.offsetWidth; b.classList.add("show");
 }
 
+// ================= shop =================
+function renderShop() {
+  $("shopGems").textContent = save.gems;
+  $("shopCards").innerHTML = UPGRADES.map((up) => {
+    const lv = save.lv[up.id], maxed = lv >= up.max, price = maxed ? 0 : up.cost[lv];
+    const can = !maxed && save.gems >= price;
+    const now = up.id === "power" ? pickDamage(lv) + " per hit" : up.id === "swings" ? maxSwings(lv) + " swings" : up.id === "luck" ? "×" + luckMul(lv).toFixed(2).replace(/0$/, "") + " gems" : lv + " per run";
+    return `<button class="up${can ? " can" : ""}" data-id="${up.id}" ${maxed ? "disabled" : ""} aria-label="${up.name}, level ${lv} of ${up.max}${maxed ? ", maxed" : ", costs " + price + " gems"}">
+      <img alt="" src="${iconURL(up.icon)}"><b>${up.name}</b><span class="now">${now}</span>
+      <span class="lv">Level ${lv}${up.max < 99 ? `<small> / ${up.max}</small>` : ""}</span>
+      <span class="price">${maxed ? "Max" : `<img alt="" src="${iconURL("i_gem")}">${price}`}</span></button>`;
+  }).join("");
+  for (const b of $("shopCards").querySelectorAll(".up")) b.addEventListener("click", () => buy(b.dataset.id));
+}
+function buy(id) {
+  const up = UPGRADES.find((u) => u.id === id), lv = save.lv[id];
+  if (lv >= up.max || save.gems < up.cost[lv]) { uiSfx("click", 0.5, 0.7); return; }
+  initAudio();
+  save.gems -= up.cost[lv]; save.lv[id]++; save.flush();
+  uiSfx("craft", 0.8, 1 + save.lv[id] * 0.04);
+  renderShop(); renderGrid(); refreshGemLabels();
+  const b = $("shopCards").querySelector(`[data-id="${id}"]`); if (b) { b.classList.add("bought"); b.focus({ preventScroll: true }); }
+}
+let shopFrom = "title";
+function openShop(from) { shopFrom = from; renderShop(); $("shop").hidden = false; $(from).hidden = true; uiSfx("click", 0.5); const f = $("shopCards").querySelector(".up.can") || $("btnShopBack"); f.focus({ preventScroll: true }); }
+function closeShop() { $("shop").hidden = true; $(shopFrom).hidden = false; refreshGemLabels(); if (shopFrom === "over") renderOverButtons(); }
+function refreshGemLabels() { for (const el of document.querySelectorAll(".bank")) el.textContent = save.gems; const can = UPGRADES.some((u) => save.lv[u.id] < u.max && save.gems >= u.cost[save.lv[u.id]]); for (const el of document.querySelectorAll(".shopbtn")) el.classList.toggle("can", can); }
+
 // ================= progress =================
-const starsFor = () => store.get("stars", {});
-function unlocked() { const s = starsFor(); let n = 1; while (s[n]) n++; return n; }
+function unlocked() { let n = 1; while (save.stars[n]) n++; return n; }
 function nextMine() { return unlocked(); }
 function renderGrid() {
-  const s = starsFor(), u = unlocked();
+  const s = save.stars, u = unlocked();
   const first = Math.max(1, u - 7);
   let h = "";
   for (let n = first; n < first + 10; n++) {
@@ -1126,20 +772,20 @@ function renderGrid() {
 // ================= flow =================
 function startMine(n) {
   initAudio();
-  clearHeld();
   newMine(n);
-  for (const k in hud) hud[k] = typeof hud[k] === "number" ? -1 : "";
-  mode = "play"; overReady = false;
-  for (const id of ["title", "over", "pause"]) $(id).hidden = true;
+  for (const k in hud) hud[k] = -1;
+  mode = "play";
+  for (const id of ["title", "over", "pause", "shop"]) $(id).hidden = true;
   $("hud").hidden = false;
   resize();
-  S.cam = -4.5;
+  S.cam = S.camT = -3;
+  updateBombBtn();
   last = performance.now();
-  banner("Mine " + n, S.spec.name, n === 1 ? (COARSE ? "Hold the left or right side of the screen to steer" : "Hold ← or → to steer") : n === 2 ? "Loose blocks shake, then drop. Step aside!" : "");
+  banner("Mine " + n, S.spec.name, n === 1 && !save.stars[1] ? "Tap a block to hit it. Every hit costs a swing." : "");
 }
 function pause() {
   if (mode !== "play") return;
-  mode = "pause"; clearHeld();
+  mode = "pause";
   $("pause").hidden = false;
   if (actx) actx.suspend();
 }
@@ -1151,35 +797,42 @@ function resume() {
 function showResult() {
   if (mode !== "play") return;
   mode = "over";
+  save.flush();
   const won = S.won;
-  let stars = 0;
   const rows = [
-    { icon: "chest", txt: "Reached the treasure", ok: won },
-    { icon: "i_gem", txt: `${S.gemGoal}+ gems (got ${S.gems})`, ok: won && S.gems >= S.gemGoal },
-    { icon: "i_heart", txt: S.hurt ? `No bumps (took ${S.hurt})` : "No bumps", ok: won && S.hurt === 0 },
+    { txt: "Reached the treasure", ok: won },
+    { txt: `${S.gemGoal}+ gems dug (got ${S.gemCount})`, ok: won && S.gemCount >= S.gemGoal },
+    { txt: `A quarter of your swings left`, ok: won && S.swings >= S.maxSw * 0.25 },
   ];
-  stars = rows.filter((r) => r.ok).length;
-  if (won) { const s = starsFor(); s[S.mine] = Math.max(s[S.mine] || 0, stars); store.set("stars", s); }
+  const stars = rows.filter((r) => r.ok).length;
+  if (won) { save.stars[S.mine] = Math.max(save.stars[S.mine] || 0, stars); save.flush(); }
   $("ovMine").textContent = "Mine " + S.mine;
-  $("ovCause").textContent = won ? "Treasure!" : S.cause === "crush" ? "Squashed!" : S.cause === "lava" ? "Scorched!" : "Lamp's out!";
+  $("ovCause").textContent = won ? "Treasure!" : "Out of swings!";
   $("ovCause").classList.toggle("win", won);
+  $("ovEarn").innerHTML = `<img alt="" src="${iconURL("i_gem")}">+${S.runGems}<small>${won ? "" : " · " + Math.round(100 * S.deepest / S.D) + "% of the way down"}</small>`;
+  $("ovStars").hidden = !won; $("ovRows").hidden = !won;
   $("ovStars").innerHTML = [0, 1, 2].map((i) => `<img alt="" src="${iconURL(i < stars ? "i_star" : "i_star_off")}">`).join("");
   $("ovRows").innerHTML = rows.map((r) => `<div class="${r.ok ? "on" : ""}"><img alt="" src="${iconURL(r.ok ? "i_star" : "i_star_off")}"><span>${r.txt}</span></div>`).join("");
+  renderOverButtons();
+  $("over").hidden = false; $("hud").hidden = true;
+  if (won) $("ovStars").querySelectorAll("img").forEach((im, i) => setTimeout(() => { im.classList.add("pop"); if (i < stars) uiSfx("star", 0.8, 1 + i * 0.12); }, 250 + i * 280));
+  else uiSfx("gameover", 0.6);
+}
+function renderOverButtons() {
+  const won = S.won;
+  refreshGemLabels();
   $("btnNext").hidden = !won;
   $("btnAgain").className = won ? "big ghost" : "big";
-  $("over").hidden = false; $("hud").hidden = true;
-  const imgs = $("ovStars").querySelectorAll("img");
-  imgs.forEach((im, i) => setTimeout(() => { im.classList.add("pop"); if (i < stars) sfx("star", 0.8, 1 + i * 0.12); }, 250 + i * 280));
   (won ? $("btnNext") : $("btnAgain")).focus({ preventScroll: true });
-  setTimeout(() => { overReady = true; }, 500);
 }
 function toTitle() {
   mode = "title";
-  for (const id of ["over", "pause"]) $(id).hidden = true;
+  for (const id of ["over", "pause", "shop"]) $(id).hidden = true;
   $("hud").hidden = true;
   $("title").hidden = false;
-  renderGrid();
-  newMine(1); S.demo = 0;
+  renderGrid(); refreshGemLabels();
+  newMine(1, true); S.demoT = 0;
+  resize();
 }
 
 $("btnPlay").addEventListener("click", () => startMine(nextMine()));
@@ -1191,24 +844,44 @@ $("btnResume").addEventListener("click", resume);
 $("btnQuit").addEventListener("click", () => { $("pause").hidden = true; if (actx) actx.resume(); toTitle(); });
 $("btnSound").addEventListener("click", () => { setMuted(!muted); if (!muted) initAudio(); });
 $("btnPauseSound").addEventListener("click", () => setMuted(!muted));
+$("btnBomb").addEventListener("click", toggleBomb);
+$("btnShopTitle").addEventListener("click", () => openShop("title"));
+$("btnShopOver").addEventListener("click", () => openShop("over"));
+$("btnShopBack").addEventListener("click", closeShop);
 
 // ================= loop =================
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (mode === "play") { update(dt); if (S.won) S.wonT += dt; }
-  else if (mode === "over") { updateParts(dt); S.time += dt; }
+  if (mode === "play" || mode === "over") update(dt);
   else if (mode === "title" && S) attract(dt);
   if (S) { draw(); if (mode === "play") updateHUD(); }
 }
-// title screen: the mole digs mine 1 on its own behind the menu
+// the title screen: the mole digs mine 1 on its own behind the menu
 function attract(dt) {
-  S.demo = (S.demo || 0) - dt;
-  if (S.demo < 0) { S.demo = 0.5 + Math.random(); held.L = held.R = 0; const r = Math.random(); if (r < 0.25) held.L = 1; else if (r < 0.5) held.R = 1; }
-  S.oil = 100; S.hearts = 9;
+  S.demoT -= dt;
+  S.swings = 999;
+  if (S.demoT <= 0) { S.demoT = 0.28; const c = botChoice(); if (c) tapCell(c.x, c.y); }
   update(dt);
-  if (S.won || S.P.dead || S.P.y > 26) { newMine(1); S.demo = 0; }
+  if (S.won && S.endT > 1.5 || S.P.y > 30) { newMine(1, true); S.demoT = 0; }
+}
+// a greedy chooser, used by the title demo and the balance check: value per swing, with depth counting as value
+function botChoice(opt = {}) {
+  let best = null, bs = -1e9;
+  const deep = S.deepest;
+  for (let y = Math.max(0, deep - 14); y < Math.min(S.D, deep + 2); y++) for (let x = 0; x < COLS; x++) {
+    if (!exposed(x, y)) continue;
+    const k = K(x, y), t = S.t[k];
+    const hits = Math.max(1, Math.ceil(S.hp[k] / S.dmg));
+    let v = (y >= deep ? 2.2 : 0.2) + (y + 1 - deep > 0 ? 0.6 : 0);
+    if (S.g[k]) v += GEM_VALUE[S.g[k] - 1] * (opt.greed ?? 0.6);
+    if (FOOD[t]) v += FOOD[t] * (S.swings < 40 ? 1.2 : 0.6);
+    if (t === TNT || t === GAS) v += 4; if (t === DYN) v += 7; if (t === CRYSTAL) v += 3;
+    const s = v / hits - (hits > 3 ? 0.3 : 0) + y * 0.01;
+    if (s > bs) { bs = s; best = { x, y }; }
+  }
+  return best;
 }
 
 // ================= boot =================
@@ -1222,5 +895,8 @@ loadSprites().then(() => {
   requestAnimationFrame(frame);
 });
 // test hooks (used by sim.js)
-window.__um = { get S() { return S; }, get mode() { return mode; }, startMine, held, get, COLS, tough(x, y) { return S.rows[y] ? S.rows[y].k[x] : 1; }, step(dt) { if (mode === "play") update(dt); }, showResult };
+window.__um = {
+  get S() { return S; }, get mode() { return mode; }, save, UPGRADES, startMine, tapCell, botChoice, exposed, get,
+  step(dt) { if (mode === "play") update(dt); }, buy, reset() { save.gems = 0; save.lv = { power: 0, swings: 0, luck: 0, bombs: 0 }; save.stars = {}; save.flush(); },
+};
 })();

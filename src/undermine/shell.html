@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#120d0b">
-<meta name="description" content="A one-thumb digging game. Steer off the safe line for lamp oil, dodge blocks that shake loose and drop, and land them on their own colour for combos, in mine after mine.">
+<meta name="description" content="A tap-to-mine digging game. Every hit costs a swing: pick your path to the treasure, grab food for more swings, set off dynamite and gas, and spend your gems on a better pick.">
 <meta property="og:title" content="Undermine — an Inkset experiment">
-<meta property="og:description" content="Dig to the treasure. Grab oil, pop colours, and dodge what falls.">
+<meta property="og:description" content="Tap to dig. Every swing counts. Gems buy a better pick.">
 <meta property="og:image" content="https://inkset.games/experiments/undermine/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Undermine: a mole in a hard hat digs down through chains of coloured blocks toward a treasure chest.">
+<meta property="og:image:alt" content="Undermine: a mole in a hard hat sets off a blast in a mine full of rock, gems, TNT and gas pockets.">
 <meta property="og:site_name" content="Inkset Games">
 <meta property="og:url" content="https://inkset.games/experiments/undermine/">
 <meta property="og:type" content="website">
@@ -57,7 +57,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
 
 /* ---------- HUD ---------- */
 #hud {
-  position: absolute; top: 0; left: 0; right: 0; pointer-events: none;
+  position: absolute; top: 0; left: 0; right: 0; width: min(100%, 680px); margin: 0 auto; pointer-events: none;
   padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
   display: grid; gap: 6px;
 }
@@ -84,7 +84,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
 @keyframes throb { to { box-shadow: 0 0 0 3px rgba(226,71,75,.35); } }
 .hearts { height: 26px; display: flex; align-items: center; padding: 0 7px; border-radius: 999px; background: var(--glass); border: 1px solid var(--line); flex: none; }
 .hearts img { width: 18px; height: 18px; }
-#fx { display: flex; gap: 4px; }
+#hSw { height: 38px; padding: 0 12px 0 8px; }
+#hSw img { width: 24px; height: 24px; }
+#hSw .count { font-size: 22px; min-width: 2.2ch; }
+#hSw .fill { background: linear-gradient(90deg, #e09a2b, #ffd25a); }
+#hSw.low { border-color: rgba(226, 71, 75, .8); animation: throb .5s ease-in-out infinite alternate; }
+#hSw.low .count { color: #ff9a9a; }
+.bombbtn { pointer-events: auto; height: 46px; display: flex; align-items: center; gap: 4px; padding: 0 12px 0 8px; border-radius: 999px; background: var(--glass); border: 2px solid var(--line); cursor: pointer; font-family: var(--display); font-size: 20px; }
+.bombbtn img { width: 30px; height: 30px; }
+.bombbtn.armed { border-color: #ff8a5a; background: rgba(255,120,80,.25); box-shadow: 0 0 0 4px rgba(255,120,80,.25); }
 .fx { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); border: 2px solid var(--line); position: relative; }
 .fx img { width: 20px; height: 20px; }
 .fx.good { border-color: var(--good); } .fx.bad { border-color: var(--bad); }
@@ -139,6 +147,25 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
 .starrows div { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); text-align: left; }
 .starrows img { width: 22px; height: 22px; flex: none; }
 .starrows .on { color: var(--cream); }
+.earn { display: flex; align-items: center; gap: 6px; font-family: var(--display); font-size: 30px; margin: 0; }
+.earn img { width: 30px; height: 30px; }
+.earn small { font-family: var(--body); font-size: 14px; color: var(--muted); margin-left: 4px; }
+.shopbtn { display: inline-flex; align-items: center; gap: 6px; }
+.shopbtn img { width: 22px; height: 22px; }
+.shopbtn.can { box-shadow: inset 0 0 0 2px var(--good); }
+.ups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; }
+.up { display: grid; justify-items: center; gap: 4px; padding: 12px 8px 10px; border-radius: 16px; border: 2px solid var(--line); background: rgba(255,244,220,.06); cursor: pointer; }
+.up > img { width: 44px; height: 44px; }
+.up b { font-family: var(--display); font-weight: 400; font-size: 20px; line-height: 1; }
+.up .now { font-size: 13px; color: var(--muted); }
+.up .lv { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); } .up .lv small { color: var(--muted); font-size: 12px; }
+.up .price { display: flex; align-items: center; gap: 4px; font-family: var(--display); font-size: 18px; margin-top: 2px; }
+.up .price img { width: 18px; height: 18px; }
+.up.can { border-color: var(--good); }
+.up:not(.can) .price { opacity: .5; }
+.up:disabled { opacity: .55; cursor: default; }
+.up.bought { animation: bought .35s ease-out; }
+@keyframes bought { 40% { transform: scale(1.06); } }
 .row2 { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .coarse .keys { display: none; }
 @media (prefers-reduced-motion: reduce) {
@@ -158,9 +185,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
       <div class="pill" title="Gems"><span class="icons"><img alt="" data-s="i_gem"></span><span class="count" id="hGems">0</span></div>
     </div>
     <div class="row">
-      <div class="hearts" role="img" aria-label="3 hearts"><span class="icons" id="hHearts"></span></div>
-      <div class="meter" id="hMeter" title="Lamp oil"><img alt="" data-s="oil"><div class="bar"><div class="fill" id="hFill"></div></div></div>
-      <div id="fx"></div>
+      <div class="meter" id="hSw" title="Swings left"><img alt="" data-s="pick"><span class="count" id="hSwings">0</span><div class="bar"><div class="fill" id="hSwFill"></div></div></div>
+      <button class="bombbtn" id="btnBomb" aria-pressed="false" aria-label="Bomb: tap it, then tap a block" hidden><img alt="" data-s="i_bomb"><span id="hBombs">0</span></button>
     </div>
   </div>
 
@@ -169,10 +195,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
   <div class="overlay" id="title">
     <div class="card">
       <h1 class="logo">Undermine</h1>
-      <p class="tag">Dig to the treasure. Grab oil, pop colours, and dodge what falls.</p>
-      <div class="steer"><img alt="" data-s="arrow"><span>Hold left or right to steer.<br>Digging down is automatic.</span><img alt="" data-s="arrow" class="flip"></div>
+      <p class="tag">Tap to dig. Every swing counts. Gems buy a better pick.</p>
       <div id="loading">Sharpening the pickaxe…</div>
       <button class="big" id="btnPlay" hidden>Dig</button>
+      <button class="big ghost shopbtn" id="btnShopTitle"><img alt="" data-s="i_gem"><span class="bank">0</span> Shop</button>
       <div class="grid" id="mineGrid" aria-label="Mines"></div>
       <button class="lnk" id="btnSound">Sound: on</button>
       <a class="lnk" href="../">&larr; Inkset experiments</a>
@@ -190,11 +216,21 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
   <div class="overlay" id="over" hidden>
     <div class="card">
       <p class="mk" id="ovMine">Mine 1</p>
-      <h2 class="cause" id="ovCause">Gulped!</h2>
+      <h2 class="cause" id="ovCause">Out of swings!</h2>
+      <p class="earn" id="ovEarn"></p>
       <div class="stars" id="ovStars"></div>
       <div class="starrows" id="ovRows"></div>
       <button class="big" id="btnNext">Next mine</button>
-      <div class="row2"><button class="big ghost" id="btnAgain">Try again</button><button class="big ghost" id="btnMenu">Mines</button></div>
+      <div class="row2"><button class="big ghost" id="btnAgain">Try again</button><button class="big ghost shopbtn" id="btnShopOver"><img alt="" data-s="i_gem"><span class="bank">0</span> Shop</button><button class="big ghost" id="btnMenu">Mines</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="shop" hidden>
+    <div class="card">
+      <h2 class="sh">Shop</h2>
+      <p class="earn"><img alt="" data-s="i_gem"><span id="shopGems">0</span></p>
+      <div class="ups" id="shopCards"></div>
+      <button class="big" id="btnShopBack">Done</button>
     </div>
   </div>
 </div>

@@ -206,3 +206,39 @@ sprite("oil", { w: 26, h: 30, outline: "k", ow: 1.5 },
   circle(13, 18, 6.5, "#2b2440"),
   path("M13 12 Q8.5 18 13 22 Q17.5 18 13 12 Z", { fill: "#ffd25a", glow: { r: 2.5, color: "o" } }),
   rect(6, 8, 3, 18, { fill: "w", r: 1.5, opacity: 0.35 }))
+
+// ---------- tap-to-mine: food, hazards-that-help, shop icons ----------
+sprite("apple", { w: 26, h: 26, outline: "k", ow: 1.4 },
+  path("M13 7 Q6 3 3.5 10 Q2 19 9 23 Q11.5 24.5 13 23 Q14.5 24.5 17 23 Q24 19 22.5 10 Q20 3 13 7 Z", "r"),
+  clip(path("M13 7 Q6 3 3.5 10 Q2 19 9 23 Q11.5 24.5 13 23 Q14.5 24.5 17 23 Q24 19 22.5 10 Q20 3 13 7 Z", "k"), ellipse(18, 19, 7, 6, { fill: "R", opacity: 0.6 })),
+  ellipse(8, 10.5, 2.2, 3, { fill: "w", opacity: 0.6 }),
+  line([13, 7, 14, 2], { stroke: "#6b3d10", sw: 1.8 }), path("M14 3.5 Q19 0.5 21 4 Q17 6 14 3.5 Z", "g"))
+sprite("lunch", { w: 30, h: 26, outline: "k", ow: 1.4 },
+  path("M3 13 Q3 4 15 4 Q27 4 27 13 Z", "#e6a463"),
+  rect(2, 12, 26, 3.5, { fill: "g", r: 1.5 }), rect(3, 15, 24, 3, { fill: "r", r: 1 }), rect(2.5, 17.5, 25, 3, { fill: "y", r: 1 }),
+  rect(3, 20, 24, 4.5, { fill: "#d08a45", r: 2 }),
+  sym(15, circle(9, 8, 0.8, "#fff4dc"), circle(15, 6.5, 0.8, "#fff4dc")))
+sprite("gas", { w: 32, h: 32 },
+  rect(0, 0, 32, 32, "#24301f"),
+  circle(16, 17, 11, { fill: "#7fe08a", opacity: 0.25, glow: { r: 4, color: "#7fe08a" } }),
+  circle(11, 13, 5, { fill: "#9cf07a", stroke: "#2f8a4f", sw: 1.2 }), circle(20, 20, 6, { fill: "#7fe08a", stroke: "#2f8a4f", sw: 1.2 }),
+  circle(21, 9, 3, { fill: "#b8ff9a", stroke: "#2f8a4f", sw: 1 }), circle(10, 23, 2.6, { fill: "#b8ff9a", stroke: "#2f8a4f", sw: 1 }),
+  circle(9.5, 11.5, 1.4, { fill: "w", opacity: 0.8 }), circle(18, 18, 1.6, { fill: "w", opacity: 0.8 }),
+  rect(0.75, 0.75, 30.5, 30.5, { stroke: "#3a5a2f", sw: 1.5, r: 3 }))
+sprite("crystal", { w: 32, h: 32 },
+  rect(0, 0, 32, 32, "#1c2240"),
+  poly([16, 3, 23, 12, 19, 29, 12, 29, 9, 12], { fill: "#7fd6ff", glow: { r: 3, color: "#58b6ff" } }),
+  poly([16, 3, 23, 12, 16, 14], { fill: "#d6f3ff" }), poly([9, 12, 16, 14, 12, 29], { fill: "#3f8fe8" }),
+  path("M17 8 L13 16 L18 16 L14 25", { stroke: "#ffe86a", sw: 1.8, glow: { r: 2, color: "y" } }),
+  rect(0.75, 0.75, 30.5, 30.5, { stroke: "#2f3a6a", sw: 1.5, r: 3 }))
+sprite("dynamite", { w: 32, h: 32 },
+  rect(0, 0, 32, 32, "#4a2a1a"),
+  rect(6, 7, 6, 22, { fill: "#d8402f", r: 2 }), rect(13, 5, 6, 24, { fill: "#e45a45", r: 2 }), rect(20, 7, 6, 22, { fill: "#d8402f", r: 2 }),
+  rect(5, 16, 22, 4, { fill: "#3a332c", r: 1 }),
+  curve([16, 5, 18, 1.5, 22, 2.5], { stroke: "Y", sw: 1.3 }), star(22.5, 2.5, 5, 2.4, 1, { fill: "y", glow: { r: 2, color: "o" } }),
+  rect(0.75, 0.75, 30.5, 30.5, { stroke: "#2a160c", sw: 1.5, r: 3 }))
+sprite("i_bolt", I, poly([14, 1, 4, 14, 11, 14, 8, 23, 20, 9, 13, 9, 17, 1], { fill: "y", glow: { r: 2, color: "o" } }))
+sprite("i_clover", I, sym(12, circle(7.5, 7.5, 4.6, "g"), circle(7.5, 15, 4.6, "g")), circle(12, 11, 3, "G"), curve([12, 13, 13, 18, 16, 22], { stroke: "G", sw: 2 }))
+sprite("i_power", I, stamp("pick", -2, 0, { scale: 0.72 }), poly([17, 9, 21.5, 15, 19, 15, 19, 22, 15, 22, 15, 15, 12.5, 15], { fill: "g" }))
+sprite("i_swings", I, stamp("pick", -2, 0, { scale: 0.72 }), rect(14, 15, 9, 3, { fill: "g", r: 1 }), rect(17, 12, 3, 9, { fill: "g", r: 1 }))
+sprite("i_apple", I, stamp("apple", 0, 0, { scale: 0.92 }))
