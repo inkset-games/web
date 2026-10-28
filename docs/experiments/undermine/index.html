@@ -466,11 +466,12 @@ function mineSpec(n) {
     biome: (n - 1) % BIOMES.length,
     hpMul: 1 + 0.12 * (n - 1),                       // deeper mines have tougher rock: the shop is how you keep up
     stone: 0.22 + 0.16 * t,                          // share of stone and of hard rock, more of both further down
-    hard: n < 2 ? 0.04 : 0.07 + 0.13 * t,
-    apple: 0.024 - 0.008 * t, lunch: 0.005,
+    hard: n < 2 ? 0.04 : 0.05 + 0.15 * t,
+    apple: 0.03 - 0.014 * t, lunch: 0.005,
     tnt: 0.012, gas: n < 2 ? 0 : 0.05 + 0.04 * t, crystal: n < 3 ? 0 : 0.008, dyn: n < 4 ? 0 : 0.006,
     ledge: n < 3 ? 0 : 0.03 + 0.04 * t,
     gem: 0.075,
+    crush: n < 2 ? 0.35 : 0.42 + 0.18 * t,                          // rows per second the ceiling creeps down
   };
 }
 
@@ -491,7 +492,8 @@ function newMine(n, demo) {
     runGems: 0, gemCount: 0, gemTotal: 0, deepest: 0, eaten: 0,
     fuses: [], bolts: [], parts: [], floats: [], icons: [], flashes: [], hits: new Map(),
     shake: 0, flash: 0, flashC: "#fff", time: 0, cam: -3, camT: -3, free: false, hover: null,
-    won: false, over: false, endT: 0,
+    won: false, over: false, endT: 0, cause: "",
+    ceil: -7, ceilOn: false, rumbleT: 0,             // the crusher: everything above row `ceil` is gone
   };
   genMine();
 }
@@ -502,7 +504,7 @@ function get(x, y) {
   if (y > S.D + 2) return BED;
   return S.t[K(x, y)];
 }
-function setT(x, y, t) { const k = K(x, y); S.t[k] = t; S.hp[k] = S.max[k] = t === E || t === BED || t === CHAMBER ? 0 : Math.max(1, Math.round(BASE_HP[t] * (t <= HARD ? S.spec.hpMul : 1))); }
+function setT(x, y, t) { const k = K(x, y); S.t[k] = t; S.ver = (S.ver || 0) + 1; S.hp[k] = S.max[k] = t === E || t === BED || t === CHAMBER ? 0 : Math.max(1, Math.round(BASE_HP[t] * (t <= HARD ? S.spec.hpMul : 1))); }
 
 function genMine() {
   const sp = S.spec, D = S.D, f = (y) => y / D;
@@ -545,20 +547,39 @@ function genMine() {
   S.gemGoal = Math.max(3, Math.round(S.gemTotal * 0.3));
 }
 
-// a block can be hit when it touches open space (or the sky)
+// open cells the mole can get to: along tunnels and down, but at most one hop above where it stands
+const RK = (x, y) => (y + 1) * COLS + x;
+function reach() {
+  const P = S.P, key = P.x + "," + P.y + "," + S.ver + "," + Math.floor(S.ceil + 0.4);
+  if (S.reachKey === key) return S.reach;
+  const m = new Map([[RK(P.x, P.y), 0]]), q = [[P.x, P.y]];
+  for (let i = 0; i < q.length; i++) {
+    const [cx, cy] = q[i], d = m.get(RK(cx, cy));
+    for (const [ax, ay] of [[-1, 0], [1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + ax, ny = cy + ay;
+      if (nx < 0 || nx >= COLS || ny < -1 || ny < P.y - 1 || ny + 0.6 < S.ceil || get(nx, ny) !== E || m.has(RK(nx, ny))) continue;
+      m.set(RK(nx, ny), d + 1); q.push([nx, ny]);
+    }
+  }
+  S.reachKey = key; S.reach = m;
+  return m;
+}
+const canStand = (x, y) => x >= 0 && x < COLS && y >= -1 && reach().has(RK(x, y));
+// a block can be hit when the mole can get next to it
 function exposed(x, y) {
   const t = get(x, y);
   if (t === E || t === BED || t === CHAMBER) return false;
-  if (y === 0) return true;
-  return get(x - 1, y) === E || get(x + 1, y) === E || get(x, y - 1) === E || get(x, y + 1) === E;
+  if (y + 0.6 < S.ceil) return false;
+  return canStand(x - 1, y) || canStand(x + 1, y) || canStand(x, y - 1) || canStand(x, y + 1);
 }
 const hitsLeft = (x, y) => Math.ceil(S.hp[K(x, y)] / S.dmg);
 
 // ================= tapping =================
 function tapCell(x, y) {
   if (S.won || S.over) return;
+  if (get(x, y) === E && !S.armed) { walkTo(x, y); return; }
   if (!exposed(x, y)) { if (get(x, y) !== E) nope(x, y); return; }
-  S.free = false;
+  S.free = false; S.ceilOn = true;
   if (S.armed) { placeBomb(x, y); return; }
   if (S.swings <= 0) return;
   S.swings--;
@@ -578,14 +599,23 @@ function nope(x, y) {
   S.hits.set(K(x, y), -0.18);
   sfx("click", 0.5, 0.7);
 }
+// tapping open space walks the mole there (free), so you can drop down a shaft you already dug
+function walkTo(x, y) {
+  const P = S.P, found = canStand(x, y) ? reach().get(RK(x, y)) : 0;
+  if (!found) return;
+  S.free = false; S.ceilOn = true;
+  P.ox = P.fx; P.oy = P.fy; P.x = x; P.y = y; P.mv = 0; P.walk = found;
+  if (x !== P.ox) P.face = Math.sign(x - P.ox);
+  sfx("step", 0.6);
+}
 // the mole hops into the open cell next to the block it is hitting, whichever is nearest
 function moveNextTo(x, y) {
   const P = S.P;
   let best = null, bd = 1e9;
   for (const [ax, ay] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) {
     const nx = x + ax, ny = y + ay;
-    if (nx < 0 || nx >= COLS || get(nx, ny) !== E) continue;
-    const d = Math.abs(nx - P.x) + Math.abs(ny - P.y) + (ay === 1 ? 0.5 : 0);
+    if (!canStand(nx, ny)) continue;
+    const d = reach().get(RK(nx, ny)) + (ay === 1 ? 0.5 : 0);
     if (d < bd) { bd = d; best = [nx, ny]; }
   }
   if (!best) return;
@@ -691,7 +721,12 @@ function zap(x, y) {
 // ================= ending a run =================
 function checkOut() {
   if (S.swings > 0 || S.won || S.over) return;
-  S.over = true; S.endT = 0;
+  S.over = true; S.endT = 0; S.cause = "swings";
+}
+function crushed() {
+  S.over = true; S.endT = 0; S.cause = "crush";
+  sfx("crash", 0.9); sfx("hurt", 0.8); shake(0.7);
+  burst(S.P.fx + 0.5, S.P.fy + 0.3, 16, BIOMES[S.spec.biome].chip, 4);
 }
 function win(x) {
   S.won = true; S.endT = 0;
@@ -728,16 +763,32 @@ function clampCam(c) { return clamp(c, -3, S.D + 3 - (VIEW_ROWS - TOP / TS)); }
 function update(dt) {
   S.time += dt;
   const P = S.P;
-  P.mv = Math.min(1, P.mv + dt / 0.12);
+  P.mv = Math.min(1, P.mv + dt / (P.fall ? 0.07 : P.walk ? 0.07 * P.walk : 0.12));
+  if (P.mv >= 1) P.walk = 0;
+  // gravity: once the swing is done the mole drops into any hole under it
+  if (P.mv >= 1 && P.swing < 0.15 && !S.won && P.y < S.D && get(P.x, P.y + 1) === E) {
+    P.ox = P.fx; P.oy = P.fy; P.y++; P.mv = 0; P.fall = (P.fall || 0) + 1;
+  } else if (P.mv >= 1 && P.fall) {
+    if (P.fall > 1) { sfx("land", 0.7); burst(P.x + 0.5, P.y + 0.95, 6, BIOMES[S.spec.biome].dust, 1.6); }
+    P.fall = 0;
+  }
   P.fx = lerp(P.ox, P.x, easeOut(P.mv)); P.fy = lerp(P.oy, P.y, easeOut(P.mv));
   P.swing = Math.max(0, P.swing - dt * 7);
   P.blink -= dt; if (P.blink < -0.12) P.blink = 2 + Math.random() * 3;
   for (const [k, v] of S.hits) { const nv = v > 0 ? v - dt : v + dt; if (Math.abs(nv) < 0.01 || Math.sign(nv) !== Math.sign(v)) S.hits.delete(k); else S.hits.set(k, nv); }
   updateFuses(dt);
   updateParts(dt);
+  // the crusher creeps down from the surface, and hurries to catch up if you get far ahead
+  if (S.ceilOn && !S.won && !S.over) {
+    const gap = P.fy - S.ceil;
+    S.ceil = Math.min(S.D - 0.5, S.ceil + (S.spec.crush + Math.max(0, gap - 7) * 0.3) * dt);
+    if (S.ceil > P.fy + 0.3) crushed();
+    S.rumbleT -= dt;
+    if (gap < 3 && S.rumbleT <= 0) { S.rumbleT = 0.9; sfx("rumble", 0.25 + (3 - gap) * 0.15); }
+  }
   S.shake = Math.max(0, S.shake - dt * 1.8);
   S.flash = Math.max(0, S.flash - dt * 1.6);
-  if (S.over && !S.fuses.length) { S.endT += dt; if (S.endT > 0.9 && mode === "play") showResult(); }
+  if (S.over && (!S.fuses.length || S.cause === "crush")) { S.endT += dt; if (S.endT > 0.9 && mode === "play") showResult(); }
   if (S.won) { S.endT += dt; if (S.endT > 1.8 && mode === "play") showResult(); }
   // camera: keep the mole a little above the middle, unless the player has dragged to look around
   if (!S.free) S.camT = clampCam(P.fy - (VIEW_ROWS - TOP / TS) * 0.42 - TOP / TS);
@@ -827,6 +878,7 @@ function draw() {
     ctx.fillRect(X(f.x), Y(f.y), TS, TS);
   }
   drawMole(X, Y, u);
+  drawCrusher(X, Y);
   // lightning
   for (const b of S.bolts) {
     ctx.globalAlpha = clamp(b.t / 0.35, 0, 1);
@@ -880,12 +932,50 @@ function draw() {
     g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, `rgba(4,2,6,${dark})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+  const gap = P.fy - S.ceil;
+  if (S.ceilOn && gap < 4 && !S.won && mode === "play") {
+    const a = (1 - gap / 4) * (0.35 + 0.2 * Math.sin(S.time * 10));
+    const g = ctx.createLinearGradient(0, 0, 0, H * 0.35);
+    g.addColorStop(0, `rgba(190,20,20,${a})`); g.addColorStop(1, "rgba(190,20,20,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H * 0.35);
+  }
   if (S.swings <= 10 && !S.won && mode === "play") {
     const a = (1 - S.swings / 10) * (0.25 + 0.15 * Math.sin(S.time * 8));
     const g = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.3, W / 2, H * 0.45, Math.max(W, H) * 0.75);
     g.addColorStop(0, "rgba(120,0,10,0)"); g.addColorStop(1, `rgba(150,10,20,${a})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+}
+// a slab of dark rock with teeth along the bottom, coming down the shaft
+function drawCrusher(X, Y) {
+  const c = S.ceil;
+  if (Y(c) < -TS) return;
+  const by = Y(c), th = TS * 0.3, band = TS * 0.32, top = -TS * 2;
+  ctx.fillStyle = "#1c1513"; ctx.fillRect(0, top, W, by - th - band - top);
+  ctx.fillStyle = "#2c221e";
+  for (let i = 1; i < 8; i++) ctx.fillRect(0, by - th - band - TS * i * 1.4, W, TS * 0.1);
+  // hazard band
+  ctx.save(); ctx.beginPath(); ctx.rect(0, by - th - band, W, band); ctx.clip();
+  ctx.fillStyle = "#ffcf3a"; ctx.fillRect(0, by - th - band, W, band);
+  ctx.fillStyle = "#1c1513";
+  for (let x = -band; x < W + band; x += band * 1.6) { ctx.beginPath(); ctx.moveTo(x, by - th); ctx.lineTo(x + band * 0.8, by - th); ctx.lineTo(x + band * 1.6, by - th - band); ctx.lineTo(x + band * 0.8, by - th - band); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  // teeth
+  const tw = TS * 0.45, n = Math.ceil(W / tw) + 1;
+  ctx.fillStyle = "#9a8a80";
+  ctx.beginPath(); ctx.moveTo(0, by - th);
+  for (let i = 0; i < n; i++) { ctx.lineTo(i * tw + tw / 2, by); ctx.lineTo((i + 1) * tw, by - th); }
+  ctx.closePath(); ctx.fill();
+  // glows red when it's close to the mole
+  const gap = S.P.fy - c;
+  if (gap < 4 && !S.won) {
+    const a = (1 - gap / 4) * (0.55 + 0.35 * Math.sin(S.time * 12));
+    const g = ctx.createLinearGradient(0, by - th, 0, by + TS * 1.2);
+    g.addColorStop(0, `rgba(255,60,40,${a})`); g.addColorStop(1, "rgba(255,60,40,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, by - th, W, TS * 1.2 + th);
+  }
+  // dust shaken loose
+  if (Math.random() < 0.35 && mode !== "over") S.parts.push({ x: Math.random() * COLS, y: c, vx: 0, vy: 1, life: 0.6, max: 0.6, c: "#6a5a50", s: 0.05, g: 10 });
 }
 function drawTile(t, v, cx, cy, u, bi) {
   if (t === STONE) { spr(`dirt_${bi}_${v}`, cx, cy, u * 1.002); spr(`rock_${bi}`, cx, cy, u * 1.002); return; }
@@ -1020,7 +1110,7 @@ function startMine(n) {
   S.cam = S.camT = -3;
   updateBombBtn();
   last = performance.now();
-  banner("Mine " + n, S.spec.name, n === 1 && !save.stars[1] ? "Tap a block to hit it. Every hit costs a swing." : "");
+  banner("Mine " + n, S.spec.name, n === 1 && !save.stars[1] ? "Tap a block to hit it. Stay ahead of the crusher!" : "");
 }
 function pause() {
   if (mode !== "play") return;
@@ -1046,7 +1136,7 @@ function showResult() {
   const stars = rows.filter((r) => r.ok).length;
   if (won) { save.stars[S.mine] = Math.max(save.stars[S.mine] || 0, stars); save.flush(); }
   $("ovMine").textContent = "Mine " + S.mine;
-  $("ovCause").textContent = won ? "Treasure!" : "Out of swings!";
+  $("ovCause").textContent = won ? "Treasure!" : S.cause === "crush" ? "Crushed!" : "Out of swings!";
   $("ovCause").classList.toggle("win", won);
   $("ovEarn").innerHTML = `<img alt="" src="${iconURL("i_gem")}">+${S.runGems}<small>${won ? "" : " · " + Math.round(100 * S.deepest / S.D) + "% of the way down"}</small>`;
   $("ovStars").hidden = !won; $("ovRows").hidden = !won;
@@ -1103,7 +1193,7 @@ function attract(dt) {
   S.swings = 999;
   if (S.demoT <= 0) { S.demoT = 0.28; const c = botChoice(); if (c) tapCell(c.x, c.y); }
   update(dt);
-  if (S.won && S.endT > 1.5 || S.P.y > 30) { newMine(1, true); S.demoT = 0; }
+  if (S.won && S.endT > 1.5 || S.over && S.endT > 1.2 || S.P.y > 30) { newMine(1, true); S.demoT = 0; }
 }
 // a greedy chooser, used by the title demo and the balance check: value per swing, with depth counting as value
 function botChoice(opt = {}) {
@@ -1114,6 +1204,7 @@ function botChoice(opt = {}) {
     const k = K(x, y), t = S.t[k];
     const hits = Math.max(1, Math.ceil(S.hp[k] / S.dmg));
     let v = (y >= deep ? 2.2 : 0.2) + (y + 1 - deep > 0 ? 0.6 : 0);
+    if (S.P.fy - S.ceil < 4 && y <= S.P.y) v = v * 0.1 - 2;   // the crusher is close: only down will do
     if (S.g[k]) v += GEM_VALUE[S.g[k] - 1] * (opt.greed ?? 0.6);
     if (FOOD[t]) v += FOOD[t] * (S.swings < 40 ? 1.2 : 0.6);
     if (t === TNT || t === GAS) v += 4; if (t === DYN) v += 7; if (t === CRYSTAL) v += 3;

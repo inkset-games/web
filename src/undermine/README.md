@@ -26,11 +26,13 @@ The share card (`og.png`) and the experiments thumbnail (`thumb.jpg`) come from 
 
 ## How it plays
 
-Tap any block that touches open space to hit it. Each hit is one swing; dirt breaks in one hit, stone and hard rock take more, and the mole hops to whichever block you tap, up or down. When the swings run out the run is over, but every gem you dug up is kept, and the shop between runs sells more pick power, more swings, gem luck and bombs. Food in the dirt gives swings back. TNT blasts 3×3, dynamite drills a column, a lightning crystal zaps the nearest gems, and gas pockets blow up and set off the gas next to them. Break into the chamber at the bottom of a mine to open the treasure chest and unlock the next mine.
+Tap any block that touches open space to hit it. Each hit is one swing; dirt breaks in one hit, stone and hard rock take more, and the mole steps next to whichever block you tap (it can hop one row up, and falls into any hole under it). Tapping open space walks there for free. From your first tap a crusher creeps down the shaft from the surface and speeds up if you get far ahead, so dawdling gets you squashed. When the swings run out, or the crusher catches you, the run is over, but every gem you dug up is kept, and the shop between runs sells more pick power, more swings, gem luck and bombs. Food in the dirt gives swings back. TNT blasts 3×3, dynamite drills a column, a lightning crystal zaps the nearest gems, and gas pockets blow up and set off the gas next to them. Break into the chamber at the bottom of a mine to open the treasure chest and unlock the next mine.
 
 ## Tuning knobs
 
 - `mineSpec(n)`: depth, rock toughness (`hpMul`), the share of stone and hard rock, food, explosives, ledges and gems for mine `n`. Rock type comes from noise and is split by share in `genMine()`.
+- `crush` in `mineSpec(n)` is how many rows a second the crusher falls; it also catches up at 0.3 rows/s for every row past 7 ahead (in `update()`).
 - `BASE_HP`, `FOOD` and `GEM_VALUE` at the top of `game.js`.
+- `sim.js` taps every `TAP` seconds (default 0.35); try `TAP=0.7` to check a slow player against the crusher.
 - `UPGRADES` with `pickDamage`, `maxSwings` and `luckMul`: prices grow by `grow` per level, then flatten to +12% after level 12, so power and swings never max out.
 - Stars: reach the chest, dig 30% of the mine's gems, and finish with a quarter of your swings left.

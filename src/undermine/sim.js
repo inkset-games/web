@@ -1,5 +1,5 @@
 // Balance check: a greedy bot plays the campaign from a fresh save, spending gems in the shop between runs.
-// Usage: node sim.js [lastMine] [maxRunsPerMine]   (VP=390x844 for a phone-sized view)
+// Usage: node sim.js [lastMine] [maxRunsPerMine]   (VP=390x844 for a phone-sized view, TAP=0.35 seconds per tap)
 const { chromium } = require("playwright");
 const path = require("path");
 (async () => {
@@ -11,8 +11,8 @@ const path = require("path");
   await p.goto("file://" + path.join(__dirname, "..", "..", "docs", "experiments", "undermine", "index.html"));
   await p.waitForTimeout(1200);
   const [last, maxRuns] = [+(process.argv[2] || 12), +(process.argv[3] || 10)];
-  const cont = !!process.env.CONTINUE;
-  const res = await p.evaluate(({ last, maxRuns, cont }) => {
+  const cont = !!process.env.CONTINUE, tap = +(process.env.TAP || 0.35); // seconds between taps, about a relaxed human
+  const res = await p.evaluate(({ last, maxRuns, cont, tap }) => {
     const U = window.__um, out = [];
     U.reset();
     const shop = () => {
@@ -36,18 +36,18 @@ const path = require("path");
             if (S.bombs > 0 && S.swings < 20) { const c = U.botChoice(); if (c) { S.armed = true; U.tapCell(c.x, c.y); } }
             const c = U.botChoice(); if (c) U.tapCell(c.x, c.y); else break;
           }
-          for (let i = 0; i < 6; i++) U.step(1 / 60); t += 0.1;
+          for (let i = 0; i < tap * 60; i++) U.step(1 / 60); t += tap;
         }
         const S = U.S;
         won = S.won;
-        log.push((won ? "W" : "L") + Math.round(100 * S.deepest / S.D) + "%+" + S.runGems + (won ? "s" + S.swings : ""));
+        log.push((won ? "W" : "L") + Math.round(100 * S.deepest / S.D) + "%+" + S.runGems + (won ? "s" + S.swings : S.cause === "crush" ? "x" : ""));
         shop();
       }
       out.push({ n, D: U.S.D, runs, won, log: log.join(" "), lv: Object.values(U.save.lv).join("/"), bank: U.save.gems });
       if (!won && !cont) break;
     }
     return out;
-  }, { last, maxRuns, cont });
+  }, { last, maxRuns, cont, tap });
   for (const r of res) console.log(JSON.stringify(r));
   console.log("errors:", errs.slice(0, 5).join(" | ") || "none");
   await b.close();
