@@ -272,7 +272,7 @@ const UPGRADES = [
 // power and swings never max out (prices flatten to +12% a level after 12), so the endless mines always have an answer
 for (const up of UPGRADES) up.cost = Array.from({ length: up.max }, (_, i) => Math.round(up.base * Math.pow(up.grow, Math.min(i, 12)) * Math.pow(1.12, Math.max(0, i - 12)) / 5) * 5);
 const pickDamage = (lv) => 2 + lv;
-const maxSwings = (lv) => 50 + lv * 10;
+const maxSwings = (lv) => 48 + lv * 9;
 const luckMul = (lv) => 1 + lv * 0.15;
 
 const COARSE = matchMedia("(pointer: coarse)").matches;
@@ -465,8 +465,8 @@ function mineSpec(n) {
     apple: 0.03 - 0.014 * t, lunch: 0.005,
     tnt: 0.012, gas: n < 2 ? 0 : 0.05 + 0.04 * t, crystal: n < 3 ? 0 : 0.008, dyn: n < 4 ? 0 : 0.006,
     ledge: n < 3 ? 0 : 0.03 + 0.04 * t,
-    gem: 0.075, cave: n < 2 ? 0.06 : 0.1,
-    crush: n < 2 ? 0.35 : 0.42 + 0.18 * t,                          // rows per second the ceiling creeps down
+    gem: 0.09, open: n < 2 ? 0.24 : 0.28,
+    crush: n < 2 ? 0.38 : 0.45 + 0.2 * t,                           // rows per second the ceiling creeps down
   };
 }
 
@@ -539,15 +539,16 @@ function genMine() {
     const len = 2 + ((rnd() * 2) | 0), x0 = (rnd() * (COLS - len + 1)) | 0;
     for (let x = x0; x < x0 + len; x++) { setT(x, y, BED); S.g[K(x, y)] = 0; }
   }
-  // caves: hollow pockets you drop into when you break through
-  for (let y = 5; y < D - 4; y++) if (rnd() < sp.cave) {
-    let cx = (rnd() * COLS) | 0, cy = y;
-    const n = 3 + ((rnd() * 6) | 0);
-    for (let i = 0; i < n; i++) {
-      if (cy < D - 2) { const k = K(cx, cy); if (S.g[k]) { S.g[k] = 0; S.gemTotal--; } setT(cx, cy, E); }
-      if (rnd() < 0.7) cx = clamp(cx + (rnd() < 0.5 ? -1 : 1), 0, COLS - 1); else cy++;
-    }
-    y += 3;
+  // caverns: big open pockets that show you what's around them once you break in
+  const cav = [];
+  for (let y = 3; y < D - 3; y++) for (let x = 0; x < COLS; x++)
+    cav.push({ x, y, s: vnoise(x * 0.38 + 77, y * 0.26, sp.seed + 21) * 0.75 + vnoise(x * 1.1 + 9, y * 0.8, sp.seed + 33) * 0.25 });
+  const cs = cav.map((c) => c.s).sort((a, b) => a - b), cavT = cs[Math.floor((1 - sp.open) * cs.length)];
+  for (const c of cav) if (c.s >= cavT) {
+    const k = K(c.x, c.y);
+    if (S.t[k] === BED) continue;
+    if (S.g[k]) { S.g[k] = 0; S.gemTotal--; }
+    setT(c.x, c.y, E);
   }
   for (let x = 0; x < COLS; x++) { setT(x, D, CHAMBER); setT(x, D + 1, BED); setT(x, D + 2, BED); }
   for (let x = 0; x < COLS; x++) S.seen[K(x, 0)] = 1;
@@ -824,6 +825,7 @@ function update(dt) {
   // gravity: once the swing is done the mole drops into any hole under it
   if (P.mv >= 1 && P.swing < 0.15 && !S.won && P.y < S.D && get(P.x, P.y + 1) === E) {
     P.ox = P.fx; P.oy = P.fy; P.y++; P.mv = 0; P.fall = (P.fall || 0) + 1;
+    if (P.y + 1 > S.deepest) S.deepest = Math.min(S.D, P.y + 1);
   } else if (P.mv >= 1 && P.fall) {
     if (P.fall > 1) { sfx("land", 0.7); burst(P.x + 0.5, P.y + 0.95, 6, BIOMES[S.spec.biome].dust, 1.6); }
     P.fall = 0;
@@ -1263,8 +1265,8 @@ function attract(dt) {
 // a greedy chooser, used by the title demo and the balance check: value per swing, with depth counting as value
 function botChoice(opt = {}) {
   let best = null, bs = -1e9;
-  const deep = S.deepest;
-  for (let y = Math.max(0, deep - 14); y < Math.min(S.D, deep + 2); y++) for (let x = 0; x < COLS; x++) {
+  const deep = Math.max(S.deepest, S.P.y + 1);
+  for (let y = Math.max(0, S.P.y - 14); y < Math.min(S.D, deep + 3); y++) for (let x = 0; x < COLS; x++) {
     if (!exposed(x, y)) continue;
     const k = K(x, y), t = S.t[k];
     const hits = Math.max(1, Math.ceil(S.hp[k] / S.dmg));
