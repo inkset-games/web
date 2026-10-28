@@ -5,7 +5,7 @@ window.botStep = (U, mem, skill = "good") => {
   U.held.L = U.held.R = 0;
   if (P.dead || S.won || P.moving || skill === "idle") return;
   const g = (x, y) => U.get(x, y);
-  const cost = (x, y) => { const q = g(x, y); return q === 0 ? 0 : q === 4 || q === 9 ? 99 : q === 2 ? 4 : 1; };
+  const cost = (x, y) => { const q = g(x, y); return q === 0 ? 0 : q === 4 || q === 9 ? 99 : q === 2 ? 5 : q === 1 ? [0.6, 1, 2.5, 4][U.tough(x, y)] : 1; };
   // is something loose above column x (shaking or falling) with only air between it and row y?
   const threat = (x, y, near = 99) => {
     let top = null;
@@ -33,33 +33,33 @@ window.botStep = (U, mem, skill = "good") => {
     }
     if (best) { mem.lastDx = best; return go(best); }
   }
-  // 2. detour for a nearby oil can when the lamp needs it
-  if (S.oil < 95) {
-    let can = null, cd = 1e9;
-    for (let y = P.y; y <= P.y + 12 && y < S.D; y++) for (let x = 0; x < U.COLS; x++) if (g(x, y) === 8) {
-      const d = (y - P.y) + Math.abs(x - P.x) * 1.4;
-      let open = true; for (let k = P.y + 1; k < y; k++) if (cost(x, k) >= 99) open = false;
-      if (open && Math.abs(x - P.x) <= y - P.y + 2 && d < cd) { cd = d; can = { x, y }; }
+  // 2. plan: cheapest route over the next rows by dig time, counting oil cans as a saving
+  const H = Math.min(S.D, P.y + 14), W = U.COLS;
+  const step = (x, y) => { const q = g(x, y); return q === 0 ? 0.12 : q === 4 || q === 9 ? Infinity : q === 2 ? 1.15 : q === 1 ? [0.27, 0.41, 0.71, 1.06][U.tough(x, y)] : 0.3; };
+  const key = (x, y) => (y - P.y) * W + x, dist = new Map([[key(P.x, P.y), 0]]), prev = new Map(), todo = [[0, P.x, P.y]];
+  while (todo.length) {
+    todo.sort((a, b) => a[0] - b[0]);
+    const [d, x, y] = todo.shift();
+    if (d > dist.get(key(x, y)) || y >= H) continue;
+    for (const [ax, ay] of [[0, 1], [-1, 0], [1, 0]]) {
+      const nx = x + ax, ny = y + ay; if (nx < 0 || nx >= W) continue;
+      let c = step(nx, ny); if (!isFinite(c)) continue;
+      if (ax && threat(nx, y, 6)) c += 2;
+      const nd = d + c, k = key(nx, ny);
+      if (nd < (dist.get(k) ?? Infinity)) { dist.set(k, nd); prev.set(k, key(x, y)); todo.push([nd, nx, ny]); }
     }
-    if (can && can.x !== P.x) {
-      const dx = Math.sign(can.x - P.x);
-      if (cost(P.x + dx, P.y) < 99 && !threat(P.x + dx, P.y, 6)) return go(dx);
-    }
-    if (can && can.x === P.x) { if (!blocked) return; }
   }
-  // 3. go round rock, bedrock and lava toward the cheapest nearby column, and stick with the choice
-  if (mem.tgt != null && mem.ty === P.y && P.x !== mem.tgt && cost(P.x + Math.sign(mem.tgt - P.x), P.y) < 99 && !threat(P.x + Math.sign(mem.tgt - P.x), P.y, 5)) return go(mem.tgt - P.x);
-  mem.tgt = null;
-  const cb = cost(P.x, P.y + 1);
-  if (cb < 4) return;
-  let best = null, bc = cb;
-  for (let dx = -8; dx <= 8; dx++) {
-    const x = P.x + dx; if (!dx || x < 0 || x >= U.COLS) continue;
-    let c = 0; for (let k = Math.sign(dx); Math.abs(k) <= Math.abs(dx); k += Math.sign(dx)) c += cost(P.x + k, P.y);
-    if (c >= 99) continue;
-    c += cost(x, P.y + 1) * 0.8;
-    for (let k = Math.sign(dx); Math.abs(k) <= Math.abs(dx); k += Math.sign(dx)) if (threat(P.x + k, P.y, 5)) c += 6;
-    if (c < bc - 1) { bc = c; best = x; }
+  const want = S.oil < 95 ? 4 + (100 - S.oil) * 0.1 : 0;
+  let goal = null, gs = Infinity;
+  for (const [k, d] of dist) {
+    const y = P.y + Math.floor(k / W), x = k % W;
+    const sc = d + (H - y) * 0.45 - (g(x, y) === 8 ? want : 0);
+    if ((y === H || g(x, y) === 8) && sc < gs) { gs = sc; goal = k; }
   }
-  if (best != null) { mem.tgt = best; mem.ty = P.y; go(best - P.x); }
+  if (goal == null) return;
+  let k = goal, first = null;
+  while (prev.has(k) && prev.get(k) !== key(P.x, P.y)) k = prev.get(k);
+  first = k;
+  const fx = first % W;
+  if (fx !== P.x) go(fx - P.x);
 };

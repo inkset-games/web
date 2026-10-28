@@ -10,7 +10,7 @@ The playable build is the single file `docs/experiments/undermine/index.html`. T
 | `icon.vx.js` | The 180×180 app icon (`docs/experiments/undermine/icon.png`). |
 | `sounds.cx.js` | Sound effects and the music loop, made with [chirp](https://github.com/uilianks/chirp). |
 | `build.js` | Bundles everything into the single HTML file (SFX and music become inline MP3s; needs `ffmpeg`). |
-| `bot.js`, `sim.js` | Three bots (`idle`, `naive`, `good`) and a headless balance check. |
+| `bot.js`, `sim.js` | Three bots (`idle`, `naive`, and `good`, which plans a route by dig time) and a headless balance check. |
 
 ## Rebuild
 
@@ -31,6 +31,7 @@ Digging straight down is always possible and always safe, but it starves you. Oi
 ## Tuning knobs
 
 - `mineSpec(n)` turns a mine number into its layout and pace: depth, colour clumping, rock, bedrock ledges, lava, crates, lamp `tank` (seconds), `oilEvery` (rows between cans), `wobble` (warning before a drop) and `fallMax` (drop speed). Difficulty ramps over about 30 mines with a five-mine wave (the 4th is hardest, every 5th is a breather), then holds. Each mine is seeded by its number, so a mine replays the same every time.
+- Toughness: coloured blocks are soft, normal, bolted or plated (`TOUGH` dig times). `soft`, `tough` and `plate` in `mineSpec()` set the share of each, and `toughen()` lays them out in bands and seams from noise.
 - Oil: cans are placed by `placeOil()`. Combo oil is set in `chainPop()`. Digging a chain gives speed, not oil.
 - Gravity: `settle()`, `dropGroup()` and `updateGravity()`. `hurt()` takes a heart for a crush or lava.
 - Stars: reach the chest, collect `gemGoal` gems (set in `newMine()`), and take no bumps.
