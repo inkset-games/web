@@ -1,9 +1,10 @@
-// Balance check: a bot plays mines at a fixed timestep. Usage: node sim.js [firstMine] [lastMine] [good|naive] [triesPerMine]
+// Balance check: a bot plays mines at a fixed timestep. Usage: node sim.js [firstMine] [lastMine] [good|naive|idle] [triesPerMine]
 const { chromium } = require("playwright");
 const path = require("path");
 (async () => {
   const b = await chromium.launch();
-  const p = await b.newPage({ viewport: { width: 800, height: 800 } });
+  const [vw, vh] = (process.env.VP || "800x800").split("x").map(Number);
+  const p = await b.newPage({ viewport: { width: vw, height: vh } });
   await p.addInitScript({ path: path.join(__dirname, "bot.js") });
   const errs = [];
   p.on("pageerror", (e) => errs.push(e.message));
@@ -17,7 +18,7 @@ const path = require("path");
       const mem = {}; let t = 0;
       while (!U.S.won && !U.S.P.dead && t < 300) { window.botStep(U, mem, skill); U.step(1 / 60); t += 1 / 60; }
       const S = U.S;
-      out.push({ n, D: S.D, won: S.won, t: Math.round(t), oil: Math.round(S.oil), best: S.bestChain, chainGoal: S.chainGoal, gems: S.gems, gemGoal: S.gemGoal, hurt: S.hurt });
+      out.push({ n, D: S.D, won: S.won, why: S.won ? "" : S.cause || "time", t: Math.round(t), depth: S.maxDepth, oil: Math.round(S.oil), hurt: S.hurt, combo: S.bestCombo, cans: S.cans, from: Object.fromEntries(Object.entries(S.oilFrom).map(([k, v]) => [k, Math.round(v)])), gems: S.gems, gemGoal: S.gemGoal, stars: S.won ? 1 + (S.gems >= S.gemGoal) + (S.hurt === 0) : 0 });
     }
     return out;
   }, { a, z, skill, tries });

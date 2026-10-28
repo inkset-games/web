@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#120d0b">
-<meta name="description" content="A one-thumb digging game. Steer down to the treasure in mine after mine, popping chains of matching coloured blocks before your lamp runs out of oil.">
+<meta name="description" content="A one-thumb digging game. Steer off the safe line for lamp oil, dodge blocks that shake loose and drop, and land them on their own colour for combos, in mine after mine.">
 <meta property="og:title" content="Undermine — an Inkset experiment">
-<meta property="og:description" content="Dig to the treasure. Pop matching colours to blast your way down.">
+<meta property="og:description" content="Dig to the treasure. Grab oil, pop colours, and dodge what falls.">
 <meta property="og:image" content="https://inkset.games/experiments/undermine/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -82,6 +82,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
 .meter .fill { height: 100%; width: 100%; border-radius: 99px; background: var(--good); transform-origin: left; transition: background .3s; }
 .meter.close { border-color: rgba(226, 71, 75, .8); animation: throb .5s ease-in-out infinite alternate; }
 @keyframes throb { to { box-shadow: 0 0 0 3px rgba(226,71,75,.35); } }
+.hearts { height: 26px; display: flex; align-items: center; padding: 0 7px; border-radius: 999px; background: var(--glass); border: 1px solid var(--line); flex: none; }
+.hearts img { width: 18px; height: 18px; }
 #fx { display: flex; gap: 4px; }
 .fx { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); border: 2px solid var(--line); position: relative; }
 .fx img { width: 20px; height: 20px; }
@@ -156,6 +158,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
       <div class="pill" title="Gems"><span class="icons"><img alt="" data-s="i_gem"></span><span class="count" id="hGems">0</span></div>
     </div>
     <div class="row">
+      <div class="hearts" role="img" aria-label="3 hearts"><span class="icons" id="hHearts"></span></div>
       <div class="meter" id="hMeter" title="Lamp oil"><img alt="" data-s="oil"><div class="bar"><div class="fill" id="hFill"></div></div></div>
       <div id="fx"></div>
     </div>
@@ -166,7 +169,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline
   <div class="overlay" id="title">
     <div class="card">
       <h1 class="logo">Undermine</h1>
-      <p class="tag">Dig to the treasure. Pop matching colours to blast your way down.</p>
+      <p class="tag">Dig to the treasure. Grab oil, pop colours, and dodge what falls.</p>
       <div class="steer"><img alt="" data-s="arrow"><span>Hold left or right to steer.<br>Digging down is automatic.</span><img alt="" data-s="arrow" class="flip"></div>
       <div id="loading">Sharpening the pickaxe…</div>
       <button class="big" id="btnPlay" hidden>Dig</button>
