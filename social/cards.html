@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Spectral:wght@400;500&family=Special+Elite&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Spectral:wght@400;500&family=Special+Elite&family=Lilita+One&family=Nunito:wght@800&display=swap">
 <style>
   :root { --paper: #F1F0E7; --ink: #1B1A14; --ink-2: #46443a; --rule: #D8D5C8; --amber: #A8682A; --night: #0E0E0B; --bone: #E7E1D2; --gold: #D08A3C;
     --serif: "Spectral", Georgia, serif; --mono: "JetBrains Mono", monospace; }
@@ -30,6 +30,29 @@
   .stack { position: relative; height: 100%; }
   .stack .back { top: 40px; right: 0; transform: rotate(3deg); }
   .stack .front { bottom: 30px; left: 0; transform: rotate(-2.5deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.6); }
+  .stack3 .thumb { width: 380px; height: 253px; }
+  .stack3 .back { top: 0; right: 0; transform: rotate(4deg); }
+  .stack3 .mid { top: 150px; left: -10px; transform: rotate(-3deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.6); }
+  .stack3 .front { top: auto; bottom: 0; left: auto; right: 10px; transform: rotate(2deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.7); }
+  /* Undermine: dark soil, amber logo, a slice of real gameplay on the right */
+  .um { background: radial-gradient(ellipse at 30% 40%, #3a2416 0%, #1e140e 55%, #120d0b 100%); color: #fff4dc; padding: 0; }
+  .um::before { content: ""; position: absolute; inset: 0; opacity: .35;
+    background-image: radial-gradient(circle at 20% 30%, #5a3a22 0 3px, transparent 4px), radial-gradient(circle at 70% 80%, #4a2f1c 0 4px, transparent 5px), radial-gradient(circle at 45% 60%, #6b4630 0 2px, transparent 3px);
+    background-size: 70px 60px, 90px 80px, 50px 45px; }
+  .um .inner { position: relative; display: grid; grid-template-columns: 1fr 470px; height: 100%; }
+  .um .txt { display: flex; flex-direction: column; padding: 64px 0 64px 80px; }
+  .um .logo i { background: #ffd25a; }
+  .um .eyebrow { color: #ffd25a; font-family: var(--mono); }
+  .um h1 { font-family: "Lilita One", "Arial Black", sans-serif; font-weight: 400; font-size: 118px; line-height: .95; letter-spacing: .005em; color: #ffd25a; text-shadow: 0 7px 0 #6b3d10, 0 18px 50px rgba(0,0,0,.6); }
+  .um .lede { font-family: "Nunito", sans-serif; font-weight: 800; color: #fff4dc; font-size: 30px; line-height: 1.35; max-width: 17ch; margin-top: 26px; }
+  .um .shot { position: relative; height: 100%; }
+  .um .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .um .shot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #120d0b 0%, rgba(18,13,11,0) 22%); }
+  .um.thumb3x2 { width: 900px; height: 600px; zoom: 2; }
+  .um.thumb3x2 .inner { grid-template-columns: 1fr 448px; }
+  .um.thumb3x2 .txt { padding: 48px 0 52px 56px; }
+  .um.thumb3x2 h1 { font-size: 76px; }
+  .um.thumb3x2 .lede { font-size: 24px; max-width: 16ch; }
 </style>
 </head>
 <body>
@@ -68,10 +91,38 @@
         <p class="lede" style="font-size:26px; max-width:none">Small games that run in your browser.</p>
       </div>
     </div>
-    <div class="stack">
+    <div class="stack stack3">
       <img class="thumb back" src="../docs/experiments/yendor/thumb.jpg" alt="">
-      <img class="thumb front" src="../docs/experiments/topple/thumb.jpg" alt="">
+      <img class="thumb mid" src="../docs/experiments/topple/thumb.jpg" alt="">
+      <img class="thumb front" src="../docs/experiments/undermine/thumb.jpg" alt="">
     </div>
+  </div>
+</div>
+
+<!-- Experiment cards: data-out sets where render.js writes them -->
+<div class="card um" id="undermine" data-out="docs/experiments/undermine/og.png">
+  <div class="inner">
+    <div class="txt">
+      <div class="logo">inkset<i></i></div>
+      <div class="main">
+        <p class="eyebrow">An Inkset experiment</p>
+        <h1>Undermine</h1>
+        <p class="lede">Tap to dig. Every swing counts. Gems buy a better pick.</p>
+      </div>
+    </div>
+    <div class="shot"><img src="undermine-play.png" alt=""></div>
+  </div>
+</div>
+
+<div class="card um thumb3x2" id="undermine-thumb" data-out="docs/experiments/undermine/thumb.jpg">
+  <div class="inner">
+    <div class="txt">
+      <div class="main">
+        <h1>Undermine</h1>
+        <p class="lede">Tap to dig. Every swing counts. Gems buy a better pick.</p>
+      </div>
+    </div>
+    <div class="shot"><img src="undermine-play.png" alt=""></div>
   </div>
 </div>
 
