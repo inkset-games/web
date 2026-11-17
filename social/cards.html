@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Spectral:wght@400;500&family=Special+Elite&family=Lilita+One&family=Nunito:wght@800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Spectral:wght@400;500;600&family=Special+Elite&family=Lilita+One&family=Nunito:wght@800&display=swap">
 <style>
   :root { --paper: #F1F0E7; --ink: #1B1A14; --ink-2: #46443a; --rule: #D8D5C8; --amber: #A8682A; --night: #0E0E0B; --bone: #E7E1D2; --gold: #D08A3C;
     --serif: "Spectral", Georgia, serif; --mono: "JetBrains Mono", monospace; }
@@ -30,10 +30,6 @@
   .stack { position: relative; height: 100%; }
   .stack .back { top: 40px; right: 0; transform: rotate(3deg); }
   .stack .front { bottom: 30px; left: 0; transform: rotate(-2.5deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.6); }
-  .stack3 .thumb { width: 380px; height: 253px; }
-  .stack3 .back { top: 0; right: 0; transform: rotate(4deg); }
-  .stack3 .mid { top: 150px; left: -10px; transform: rotate(-3deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.6); }
-  .stack3 .front { top: auto; bottom: 0; left: auto; right: 10px; transform: rotate(2deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.7); }
   /* Undermine: dark soil, amber logo, a slice of real gameplay on the right */
   .um { background: radial-gradient(ellipse at 30% 40%, #3a2416 0%, #1e140e 55%, #120d0b 100%); color: #fff4dc; padding: 0; }
   .um::before { content: ""; position: absolute; inset: 0; opacity: .35;
@@ -53,6 +49,27 @@
   .um.thumb3x2 .txt { padding: 48px 0 52px 56px; }
   .um.thumb3x2 h1 { font-size: 76px; }
   .um.thumb3x2 .lede { font-size: 24px; max-width: 16ch; }
+  .stack4 .thumb { width: 330px; height: 220px; }
+  .stack4 .t1 { top: -6px; right: 0; transform: rotate(4deg); }
+  .stack4 .t2 { top: 120px; left: -14px; transform: rotate(-3deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.6); }
+  .stack4 .t3 { top: 236px; right: -8px; transform: rotate(2.5deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.65); }
+  .stack4 .t4 { bottom: -6px; left: 10px; transform: rotate(-2deg); box-shadow: 0 30px 70px -20px rgba(20,18,10,.7); }
+  /* Tiny Worlds: warm paper, cocoa ink, a slice of real gameplay on the right */
+  .tw { background: radial-gradient(ellipse at 25% 35%, #fffaf2 0%, #f7ead8 70%, #efdcc4 100%); color: #5a463c; padding: 0; }
+  .tw .inner { position: relative; display: grid; grid-template-columns: 1fr 470px; height: 100%; }
+  .tw .txt { display: flex; flex-direction: column; padding: 64px 0 64px 80px; position: relative; }
+  .tw .logo i { background: #e0973a; }
+  .tw .eyebrow { color: #c47a2c; }
+  .tw h1 { font-weight: 600; font-size: 104px; line-height: .98; letter-spacing: -0.01em; color: #5a463c; }
+  .tw .lede { font-family: "Nunito", sans-serif; font-weight: 800; color: #7a6152; font-size: 30px; line-height: 1.35; max-width: 17ch; margin-top: 26px; }
+  .tw .shot { position: relative; height: 100%; }
+  .tw .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .tw .shot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #f7ead8 0%, rgba(247,234,216,0) 16%); }
+  .tw.thumb3x2 { width: 900px; height: 600px; zoom: 2; }
+  .tw.thumb3x2 .inner { grid-template-columns: 1fr 448px; }
+  .tw.thumb3x2 .txt { padding: 48px 0 52px 56px; }
+  .tw.thumb3x2 h1 { font-size: 74px; }
+  .tw.thumb3x2 .lede { font-size: 24px; max-width: 15ch; }
 </style>
 </head>
 <body>
@@ -91,10 +108,11 @@
         <p class="lede" style="font-size:26px; max-width:none">Small games that run in your browser.</p>
       </div>
     </div>
-    <div class="stack stack3">
-      <img class="thumb back" src="../docs/experiments/yendor/thumb.jpg" alt="">
-      <img class="thumb mid" src="../docs/experiments/topple/thumb.jpg" alt="">
-      <img class="thumb front" src="../docs/experiments/undermine/thumb.jpg" alt="">
+    <div class="stack stack4">
+      <img class="thumb t1" src="../docs/experiments/yendor/thumb.jpg" alt="">
+      <img class="thumb t2" src="../docs/experiments/topple/thumb.jpg" alt="">
+      <img class="thumb t3" src="../docs/experiments/undermine/thumb.jpg" alt="">
+      <img class="thumb t4" src="../docs/experiments/tiny-worlds/thumb.jpg" alt="">
     </div>
   </div>
 </div>
@@ -123,6 +141,32 @@
       </div>
     </div>
     <div class="shot"><img src="undermine-play.png" alt=""></div>
+  </div>
+</div>
+
+<div class="card tw" id="tiny-worlds" data-out="docs/experiments/tiny-worlds/og.png">
+  <div class="inner">
+    <div class="txt">
+      <div class="logo">inkset<i></i></div>
+      <div class="main">
+        <p class="eyebrow">An Inkset experiment</p>
+        <h1>Tiny<br>Worlds</h1>
+        <p class="lede">Color a picture, then zoom into the window inside it. Forever.</p>
+      </div>
+    </div>
+    <div class="shot"><img src="tiny-worlds-play.png" alt=""></div>
+  </div>
+</div>
+
+<div class="card tw thumb3x2" id="tiny-worlds-thumb" data-out="docs/experiments/tiny-worlds/thumb.jpg">
+  <div class="inner">
+    <div class="txt">
+      <div class="main">
+        <h1>Tiny<br>Worlds</h1>
+        <p class="lede">Color a picture, then zoom into the window inside it. Forever.</p>
+      </div>
+    </div>
+    <div class="shot"><img src="tiny-worlds-play.png" alt=""></div>
   </div>
 </div>
 
